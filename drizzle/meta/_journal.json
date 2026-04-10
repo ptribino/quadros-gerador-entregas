@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1775700949869,
+      "tag": "0000_white_prism",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1775841232197,
+      "tag": "0001_majestic_baron_strucker",
+      "breakpoints": true
+    }
+  ]
+}
