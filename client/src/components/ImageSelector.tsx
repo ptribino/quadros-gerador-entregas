@@ -2,7 +2,8 @@ import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Upload, X, Loader2, HardDrive, Image as ImageIcon, FolderOpen, ChevronLeft } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Upload, X, Loader2, HardDrive, Image as ImageIcon, FolderOpen, ChevronLeft, Link as LinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 
@@ -19,7 +20,29 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
   const [driveStep, setDriveStep] = useState<DriveStep>('folders');
   const [selectedFolder, setSelectedFolder] = useState<{ id: string | null; name: string }>({ id: null, name: 'Meu Drive' });
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
+  const [folderLinkInput, setFolderLinkInput] = useState('');
+  const [folderLinkError, setFolderLinkError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const extractFolderIdFromLink = (link: string): string | null => {
+    const match = link.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : null;
+  };
+
+  const handleFolderLinkChange = (value: string) => {
+    setFolderLinkInput(value);
+    setFolderLinkError('');
+    if (!value.trim()) return;
+    const folderId = extractFolderIdFromLink(value);
+    if (folderId) {
+      // Abre o dialog já no passo de imagens da pasta informada
+      setSelectedFolder({ id: folderId, name: 'Pasta do link' });
+      setDriveStep('images');
+      setIsDriveOpen(true);
+    } else {
+      setFolderLinkError('Link inválido. Cole o link completo de uma pasta do Google Drive.');
+    }
+  };
 
   const foldersQuery = trpc.drive.listFolders.useQuery(undefined, {
     enabled: isDriveOpen && driveStep === 'folders',
@@ -99,6 +122,8 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
     if (!open) {
       setDriveStep('folders');
       setSelectedFolder({ id: null, name: 'Meu Drive' });
+      setFolderLinkInput('');
+      setFolderLinkError('');
     }
   };
 
@@ -149,6 +174,23 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
             <HardDrive className="w-4 h-4" />
             Selecionar do Google Drive
           </Button>
+
+          {/* Campo de link de pasta do Drive */}
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <LinkIcon className="w-3 h-3" />
+              Ou cole o link de uma pasta do Google Drive
+            </label>
+            <Input
+              placeholder="https://drive.google.com/drive/folders/..."
+              value={folderLinkInput}
+              onChange={(e) => handleFolderLinkChange(e.target.value)}
+              className={`text-xs ${folderLinkError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+            />
+            {folderLinkError && (
+              <p className="text-xs text-destructive">{folderLinkError}</p>
+            )}
+          </div>
 
           <p className="text-xs text-muted-foreground text-center">
             Formatos suportados: JPG, PNG, GIF, WebP (máx. 25MB)
