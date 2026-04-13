@@ -40,6 +40,7 @@ export const driveRouter = router({
         fileName: z.string().min(1, 'Nome do arquivo é obrigatório'),
         type: z.enum(['lifestyle', 'mockup', 'video']),
         frameType: z.enum(['pine', 'aluminum']),
+        folderId: z.string().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -56,7 +57,8 @@ export const driveRouter = router({
           accessToken,
           finalFileName,
           buffer,
-          mimeType
+          mimeType,
+          input.folderId
         );
 
         return {
@@ -85,6 +87,7 @@ export const driveRouter = router({
         files: files.map((f) => ({
           id: f.id,
           name: f.name,
+          mimeType: f.mimeType,
           webViewLink: f.webViewLink,
         })),
       };
@@ -97,4 +100,46 @@ export const driveRouter = router({
       });
     }
   }),
+
+  listFolders: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      const accessToken = getUserAccessToken(ctx.user!.openId);
+      const folders = await googleDriveService.listFolders(accessToken);
+
+      return {
+        success: true,
+        folders: folders.map((f) => ({
+          id: f.id,
+          name: f.name,
+        })),
+      };
+    } catch (error) {
+      console.error('[Drive] List folders error:', error);
+      if (error instanceof TRPCError) throw error;
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Falha ao listar pastas do Google Drive',
+      });
+    }
+  }),
+
+  getFileContent: protectedProcedure
+    .input(z.object({
+      fileId: z.string().min(1),
+      mimeType: z.string().min(1),
+    }))
+    .query(async ({ input, ctx }) => {
+      try {
+        const accessToken = getUserAccessToken(ctx.user!.openId);
+        const dataUrl = await googleDriveService.getFileContent(accessToken, input.fileId, input.mimeType);
+        return { success: true, dataUrl };
+      } catch (error) {
+        console.error('[Drive] Get file content error:', error);
+        if (error instanceof TRPCError) throw error;
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Falha ao baixar arquivo do Google Drive',
+        });
+      }
+    }),
 });
