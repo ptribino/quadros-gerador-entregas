@@ -94,9 +94,10 @@ class GoogleDriveService {
       orderBy: 'createdTime desc',
     });
 
-    if (folderId) {
-      params.set('q', `'${folderId}' in parents and trashed=false`);
-    }
+    const query = folderId
+      ? `'${folderId}' in parents and trashed=false and mimeType contains 'image/'`
+      : `trashed=false and mimeType contains 'image/'`;
+    params.set('q', query);
 
     const response = await fetch(`${this.baseUrl}/files?${params}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
@@ -109,6 +110,49 @@ class GoogleDriveService {
 
     const data = await response.json() as { files: GoogleDriveFile[] };
     return data.files || [];
+  }
+
+  /**
+   * Lista pastas do Google Drive do usuário
+   */
+  async listFolders(accessToken: string): Promise<GoogleDriveFile[]> {
+    const params = new URLSearchParams({
+      spaces: 'drive',
+      fields: 'files(id,name,mimeType,webViewLink)',
+      pageSize: '100',
+      orderBy: 'name',
+      q: `mimeType = 'application/vnd.google-apps.folder' and trashed=false`,
+    });
+
+    const response = await fetch(`${this.baseUrl}/files?${params}`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Drive list folders failed (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json() as { files: GoogleDriveFile[] };
+    return data.files || [];
+  }
+
+  /**
+   * Baixa o conteúdo de um arquivo do Drive e retorna como base64
+   */
+  async getFileContent(accessToken: string, fileId: string, mimeType: string): Promise<string> {
+    const response = await fetch(`${this.baseUrl}/files/${fileId}?alt=media`, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Drive get file failed (${response.status}): ${errorText}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    return `data:${mimeType};base64,${base64}`;
   }
 }
 

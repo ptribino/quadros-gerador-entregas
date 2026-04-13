@@ -1,8 +1,10 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Upload, X, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Upload, X, Loader2, HardDrive, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import { trpc } from '@/lib/trpc';
 
 interface ImageSelectorProps {
   onImageSelect: (imageUrl: string, fileName: string) => void;
@@ -11,19 +13,25 @@ interface ImageSelectorProps {
 
 export default function ImageSelector({ onImageSelect, selectedImage }: ImageSelectorProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [isDriveOpen, setIsDriveOpen] = useState(false);
+  const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const driveImages = trpc.drive.listImages.useQuery(undefined, {
+    enabled: isDriveOpen,
+  });
+
+  const utils = trpc.useUtils();
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       toast.error('Por favor, selecione uma imagem válida');
       return;
     }
 
-    // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error('A imagem deve ter no máximo 10MB');
       return;
@@ -31,7 +39,6 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
 
     setIsLoading(true);
 
-    // Create a local URL for the image
     const reader = new FileReader();
     reader.onload = (e) => {
       const imageUrl = e.target?.result as string;
@@ -46,9 +53,18 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
     reader.readAsDataURL(file);
   };
 
-  const handleGoogleDriveClick = () => {
-    toast.info('Integração com Google Drive em desenvolvimento');
-    // TODO: Implement Google Drive integration
+  const handleDriveFileSelect = async (fileId: string, fileName: string, mimeType: string) => {
+    setLoadingFileId(fileId);
+    try {
+      const result = await utils.drive.getFileContent.fetch({ fileId, mimeType });
+      onImageSelect(result.dataUrl, fileName);
+      toast.success('Imagem carregada do Google Drive!');
+      setIsDriveOpen(false);
+    } catch {
+      toast.error('Erro ao carregar imagem do Drive');
+    } finally {
+      setLoadingFileId(null);
+    }
   };
 
   const handleRemoveImage = () => {
@@ -69,42 +85,46 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
 
       {!selectedImage?.url ? (
         <div className="space-y-3">
-          {/* Upload Button */}
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Carregando...
-                </>
-              ) : (
-                <>
-                  <Upload className="w-4 h-4" />
-                  Upload de Imagem
-                </>
-              )}
-            </Button>
-          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Carregando...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4" />
+                Upload de Imagem
+              </>
+            )}
+          </Button>
 
-          {/* Help Text */}
+          <Button
+            onClick={() => setIsDriveOpen(true)}
+            variant="outline"
+            className="w-full flex items-center justify-center gap-2"
+          >
+            <HardDrive className="w-4 h-4" />
+            Selecionar do Google Drive
+          </Button>
+
           <p className="text-xs text-muted-foreground text-center">
             Formatos suportados: JPG, PNG, GIF, WebP (máx. 10MB)
           </p>
         </div>
       ) : (
         <Card className="p-4 space-y-3 bg-white border border-border">
-          {/* Image Preview */}
           <div className="relative w-full bg-muted rounded-md overflow-hidden flex items-center justify-center" style={{ minHeight: '120px' }}>
             <img
               src={selectedImage.url}
@@ -113,7 +133,6 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
             />
           </div>
 
-          {/* Remove Button */}
           <Button
             onClick={handleRemoveImage}
             variant="outline"
@@ -124,6 +143,56 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
           </Button>
         </Card>
       )}
+
+      {/* Dialog de seleção do Google Drive */}
+      <Dialog open={isDriveOpen} onOpenChange={setIsDriveOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HardDrive className="w-5 h-5" />
+              Selecionar imagem do Google Drive
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-2 mt-2">
+            {driveImages.isLoading && (
+              <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Carregando imagens...
+              </div>
+            )}
+
+            {driveImages.isError && (
+              <div className="text-center py-8 text-destructive text-sm">
+                Erro ao carregar imagens do Drive. Verifique sua conexão.
+              </div>
+            )}
+
+            {driveImages.data?.files && driveImages.data.files.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
+                <ImageIcon className="w-8 h-8" />
+                <p className="text-sm">Nenhuma imagem encontrada no Drive.</p>
+              </div>
+            )}
+
+            {driveImages.data?.files?.map((file) => (
+              <button
+                key={file.id}
+                onClick={() => handleDriveFileSelect(file.id, file.name, file.mimeType)}
+                disabled={loadingFileId === file.id}
+                className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted transition-colors text-left disabled:opacity-60"
+              >
+                {loadingFileId === file.id ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-primary flex-shrink-0" />
+                ) : (
+                  <ImageIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                )}
+                <span className="text-sm truncate">{file.name}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

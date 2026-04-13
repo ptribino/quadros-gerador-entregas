@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Loader2, Zap, LogIn, LogOut, Image as ImageIcon, Film, Layout } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Loader2, Zap, LogIn, LogOut, Image as ImageIcon, Film, Layout, FolderOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { getLoginUrl } from '@/const';
@@ -32,9 +33,12 @@ export default function Home() {
   const [environmentType, setEnvironmentType] = useState<EnvironmentType>('scandinavian');
   const [generatedItems, setGeneratedItems] = useState<GeneratedItem[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [folderDialog, setFolderDialog] = useState<{ open: boolean; item: GeneratedItem | null }>({ open: false, item: null });
+  const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
 
   const generateMutation = trpc.generation.generateImages.useMutation();
   const saveImageMutation = trpc.drive.saveImage.useMutation();
+  const foldersQuery = trpc.drive.listFolders.useQuery(undefined, { enabled: folderDialog.open });
 
   const handleGenerate = async () => {
     if (!selectedImage?.url) {
@@ -79,12 +83,14 @@ export default function Home() {
     }
   };
 
-  const handleSaveToGoogleDrive = async (item: GeneratedItem) => {
-    if (!isAuthenticated) {
-      toast.error('Faça login com Google para salvar no Drive');
-      window.location.href = getLoginUrl();
-      return;
-    }
+  const handleSaveToGoogleDrive = (item: GeneratedItem) => {
+    setSelectedFolderId(undefined);
+    setFolderDialog({ open: true, item });
+  };
+
+  const handleConfirmSave = async () => {
+    const item = folderDialog.item;
+    if (!item) return;
 
     try {
       const typeLabel = item.type === 'lifestyle' ? 'lifestyle' : item.type === 'mockup' ? 'mockup' : 'video';
@@ -97,9 +103,11 @@ export default function Home() {
         fileName,
         type: item.type,
         frameType: item.frameType,
+        folderId: selectedFolderId,
       });
 
       toast.success(`Salvo no Google Drive: ${result.fileName}`);
+      setFolderDialog({ open: false, item: null });
     } catch (error: any) {
       const msg = error?.message || '';
       if (msg.includes('login') || msg.includes('UNAUTHORIZED')) {
@@ -109,7 +117,6 @@ export default function Home() {
         toast.error('Erro ao salvar no Google Drive');
       }
       console.error(error);
-      throw error;
     }
   };
 
@@ -132,6 +139,25 @@ export default function Home() {
     { value: 'video' as const, label: 'Vídeo Lifestyle', icon: Film, desc: 'Vídeo com pessoa pendurando o quadro' },
   ];
 
+  // Gate de login: se não autenticado, mostra tela de login
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 p-8">
+        <div className="text-center space-y-2">
+          <h1 className="text-3xl font-bold text-foreground">Quadros — Gerador de Entregas</h1>
+          <p className="text-muted-foreground">Gere imagens e vídeos para e-commerce de quadros decorativos</p>
+        </div>
+        <Button
+          onClick={() => { window.location.href = getLoginUrl(); }}
+          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-lg rounded-xl"
+        >
+          <LogIn className="w-5 h-5" />
+          Entrar com Google
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -142,30 +168,18 @@ export default function Home() {
             <p className="text-sm text-muted-foreground">Gere imagens e vídeos para e-commerce de quadros decorativos</p>
           </div>
           <div className="flex items-center gap-3">
-            {isAuthenticated ? (
-              <>
-                <span className="text-sm text-muted-foreground hidden md:inline">
-                  {user?.name || user?.email}
-                </span>
-                <Button
-                  onClick={() => logout()}
-                  variant="outline"
-                  size="sm"
-                  className="flex items-center gap-1"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sair
-                </Button>
-              </>
-            ) : (
-              <Button
-                onClick={() => { window.location.href = getLoginUrl(); }}
-                className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                <LogIn className="w-4 h-4" />
-                Entrar com Google
-              </Button>
-            )}
+            <span className="text-sm text-muted-foreground hidden md:inline">
+              {user?.name || user?.email}
+            </span>
+            <Button
+              onClick={() => logout()}
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1"
+            >
+              <LogOut className="w-4 h-4" />
+              Sair
+            </Button>
           </div>
         </div>
       </div>
@@ -318,6 +332,75 @@ export default function Home() {
           <p>A fidelidade absoluta à arte original é mantida em todas as gerações.</p>
         </div>
       </div>
+
+      {/* Dialog: Escolher pasta do Drive */}
+      <Dialog open={folderDialog.open} onOpenChange={(open) => setFolderDialog({ open, item: open ? folderDialog.item : null })}>
+        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FolderOpen className="w-5 h-5" />
+              Escolher pasta no Google Drive
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-2 mt-2">
+            {foldersQuery.isLoading && (
+              <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Carregando pastas...
+              </div>
+            )}
+
+            {/* Opção: Raiz do Drive */}
+            <button
+              onClick={() => setSelectedFolderId(undefined)}
+              className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-all ${
+                selectedFolderId === undefined ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+              }`}
+            >
+              <FolderOpen className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              <span className="text-sm font-medium">Meu Drive (raiz)</span>
+            </button>
+
+            {foldersQuery.data?.folders.map((folder) => (
+              <button
+                key={folder.id}
+                onClick={() => setSelectedFolderId(folder.id)}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-all ${
+                  selectedFolderId === folder.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                }`}
+              >
+                <FolderOpen className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm truncate">{folder.name}</span>
+              </button>
+            ))}
+
+            {foldersQuery.data?.folders.length === 0 && !foldersQuery.isLoading && (
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma pasta encontrada.</p>
+            )}
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setFolderDialog({ open: false, item: null })}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmSave}
+              disabled={saveImageMutation.isPending}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              {saveImageMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Salvando...
+                </>
+              ) : (
+                'Salvar aqui'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
