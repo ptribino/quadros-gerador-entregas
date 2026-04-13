@@ -77,10 +77,12 @@ export const driveRouter = router({
       }
     }),
 
-  listImages: protectedProcedure.query(async ({ ctx }) => {
+  listImages: protectedProcedure
+    .input(z.object({ folderId: z.string().optional() }).optional())
+    .query(async ({ input, ctx }) => {
     try {
       const accessToken = getUserAccessToken(ctx.user!.openId);
-      const files = await googleDriveService.listFiles(accessToken);
+      const files = await googleDriveService.listFiles(accessToken, input?.folderId);
 
       return {
         success: true,
