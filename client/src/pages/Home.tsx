@@ -2,11 +2,12 @@ import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, Zap, LogIn, LogOut, Image as ImageIcon, Film, Layout, FolderOpen } from 'lucide-react';
+import { Loader2, Zap, LogIn, LogOut, Image as ImageIcon, Film, Layout, FolderOpen, Link as LinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { getLoginUrl } from '@/const';
 import { trpc } from '@/lib/trpc';
+import { Input } from '@/components/ui/input';
 import ImageSelector from '@/components/ImageSelector';
 import GenerationResults from '@/components/GenerationResults';
 
@@ -35,6 +36,8 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [folderDialog, setFolderDialog] = useState<{ open: boolean; item: GeneratedItem | null }>({ open: false, item: null });
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
+  const [folderLinkInput, setFolderLinkInput] = useState('');
+  const [folderLinkError, setFolderLinkError] = useState('');
   const saveCallbackRef = useRef<{ resolve: () => void; reject: (e: Error) => void } | null>(null);
 
   const generateMutation = trpc.generation.generateImages.useMutation();
@@ -81,6 +84,27 @@ export default function Home() {
       toast.error('Erro ao gerar. Verifique sua conexão e API key.');
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Extrai o ID de uma pasta a partir de um link do Google Drive
+  const extractFolderIdFromLink = (link: string): string | null => {
+    const match = link.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : null;
+  };
+
+  const handleFolderLinkChange = (value: string) => {
+    setFolderLinkInput(value);
+    setFolderLinkError('');
+    if (!value.trim()) return;
+
+    const folderId = extractFolderIdFromLink(value);
+    if (folderId) {
+      setSelectedFolderId(folderId);
+      setFolderLinkError('');
+    } else {
+      setFolderLinkError('Link inválido. Cole o link completo de uma pasta do Google Drive.');
+      // Não desmarca a seleção anterior enquanto o link é inválido
     }
   };
 
@@ -140,6 +164,10 @@ export default function Home() {
       const cancelError = new Error('cancelled');
       saveCallbackRef.current.reject(cancelError);
       saveCallbackRef.current = null;
+    }
+    if (!open) {
+      setFolderLinkInput('');
+      setFolderLinkError('');
     }
     setFolderDialog({ open, item: open ? folderDialog.item : null });
   };
@@ -367,7 +395,29 @@ export default function Home() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto space-y-2 mt-2">
+          {/* Campo para colar link da pasta */}
+          <div className="mt-3 space-y-1">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <LinkIcon className="w-3 h-3" />
+              Ou cole o link de uma pasta do Google Drive
+            </label>
+            <Input
+              placeholder="https://drive.google.com/drive/folders/..."
+              value={folderLinkInput}
+              onChange={(e) => handleFolderLinkChange(e.target.value)}
+              className={folderLinkError ? 'border-destructive focus-visible:ring-destructive' : ''}
+            />
+            {folderLinkError && (
+              <p className="text-xs text-destructive">{folderLinkError}</p>
+            )}
+            {folderLinkInput && !folderLinkError && (
+              <p className="text-xs text-green-600">✓ Pasta identificada pelo link</p>
+            )}
+          </div>
+
+          <div className="border-t border-border my-3" />
+
+          <div className="flex-1 overflow-y-auto space-y-2">
             {foldersQuery.isLoading && (
               <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -377,9 +427,9 @@ export default function Home() {
 
             {/* Opção: Raiz do Drive */}
             <button
-              onClick={() => setSelectedFolderId(undefined)}
+              onClick={() => { setSelectedFolderId(undefined); setFolderLinkInput(''); setFolderLinkError(''); }}
               className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-all ${
-                selectedFolderId === undefined ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                selectedFolderId === undefined && !folderLinkInput ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
               }`}
             >
               <FolderOpen className="w-5 h-5 text-muted-foreground flex-shrink-0" />
@@ -389,9 +439,9 @@ export default function Home() {
             {foldersQuery.data?.folders.map((folder) => (
               <button
                 key={folder.id}
-                onClick={() => setSelectedFolderId(folder.id)}
+                onClick={() => { setSelectedFolderId(folder.id); setFolderLinkInput(''); setFolderLinkError(''); }}
                 className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 text-left transition-all ${
-                  selectedFolderId === folder.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                  selectedFolderId === folder.id && !folderLinkInput ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
                 }`}
               >
                 <FolderOpen className="w-5 h-5 text-muted-foreground flex-shrink-0" />
