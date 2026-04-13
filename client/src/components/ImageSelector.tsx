@@ -41,8 +41,8 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('A imagem deve ter no máximo 10MB');
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 25MB');
       return;
     }
 
@@ -151,7 +151,7 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
           </Button>
 
           <p className="text-xs text-muted-foreground text-center">
-            Formatos suportados: JPG, PNG, GIF, WebP (máx. 10MB)
+            Formatos suportados: JPG, PNG, GIF, WebP (máx. 25MB)
           </p>
         </div>
       ) : (
