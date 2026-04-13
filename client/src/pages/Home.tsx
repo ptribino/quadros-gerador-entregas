@@ -376,6 +376,10 @@ export default function Home() {
             isLoading={isGenerating}
             onSaveToGoogleDrive={handleSaveToGoogleDrive}
             onDownload={handleDownload}
+            onReset={() => {
+              setGeneratedItems([]);
+              setSelectedImage(undefined);
+            }}
           />
         )}
 

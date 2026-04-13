@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, Save, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Download, Save, Loader2, AlertCircle, CheckCircle2, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface GeneratedItem {
@@ -19,6 +19,7 @@ interface GenerationResultsProps {
   isLoading?: boolean;
   onSaveToGoogleDrive?: (item: GeneratedItem) => Promise<void>;
   onDownload?: (item: GeneratedItem) => void;
+  onReset?: () => void;
 }
 
 const typeLabels: Record<string, string> = {
@@ -42,6 +43,7 @@ export default function GenerationResults({
   isLoading = false,
   onSaveToGoogleDrive,
   onDownload,
+  onReset,
 }: GenerationResultsProps) {
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
@@ -102,9 +104,22 @@ export default function GenerationResults({
 
   return (
     <Card className="p-6 bg-white border border-border space-y-6">
-      <div className="flex items-center gap-3">
-        <CheckCircle2 className="w-5 h-5 text-green-600" />
-        <h3 className="text-lg font-semibold text-foreground">Entregas Geradas</h3>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-green-600" />
+          <h3 className="text-lg font-semibold text-foreground">Entregas Geradas</h3>
+        </div>
+        {onReset && (
+          <Button
+            onClick={onReset}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Nova geração
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
