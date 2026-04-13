@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Upload, X, Loader2, HardDrive, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Loader2, HardDrive, Image as ImageIcon, FolderOpen, ChevronLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 
@@ -11,15 +11,24 @@ interface ImageSelectorProps {
   selectedImage?: { url: string; fileName: string };
 }
 
+type DriveStep = 'folders' | 'images';
+
 export default function ImageSelector({ onImageSelect, selectedImage }: ImageSelectorProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isDriveOpen, setIsDriveOpen] = useState(false);
+  const [driveStep, setDriveStep] = useState<DriveStep>('folders');
+  const [selectedFolder, setSelectedFolder] = useState<{ id: string | null; name: string }>({ id: null, name: 'Meu Drive' });
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const driveImages = trpc.drive.listImages.useQuery(undefined, {
-    enabled: isDriveOpen,
+  const foldersQuery = trpc.drive.listFolders.useQuery(undefined, {
+    enabled: isDriveOpen && driveStep === 'folders',
   });
+
+  const imagesQuery = trpc.drive.listImages.useQuery(
+    { folderId: selectedFolder.id ?? undefined },
+    { enabled: isDriveOpen && driveStep === 'images' }
+  );
 
   const utils = trpc.useUtils();
 
@@ -53,6 +62,18 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
     reader.readAsDataURL(file);
   };
 
+  const handleOpenDrive = () => {
+    setDriveStep('folders');
+    setSelectedFolder({ id: null, name: 'Meu Drive' });
+    setFolderImages([]);
+    setIsDriveOpen(true);
+  };
+
+  const handleSelectFolder = (folderId: string | null, folderName: string) => {
+    setSelectedFolder({ id: folderId, name: folderName });
+    setDriveStep('images');
+  };
+
   const handleDriveFileSelect = async (fileId: string, fileName: string, mimeType: string) => {
     setLoadingFileId(fileId);
     try {
@@ -73,6 +94,18 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
       fileInputRef.current.value = '';
     }
   };
+
+  const handleCloseDrive = (open: boolean) => {
+    setIsDriveOpen(open);
+    if (!open) {
+      setDriveStep('folders');
+      setSelectedFolder({ id: null, name: 'Meu Drive' });
+      setFolderImages([]);
+    }
+  };
+
+  const displayImages = imagesQuery.data?.files ?? [];
+  const isImagesLoading = imagesQuery.isLoading;
 
   return (
     <div className="space-y-4">
@@ -111,7 +144,7 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
           </Button>
 
           <Button
-            onClick={() => setIsDriveOpen(true)}
+            onClick={handleOpenDrive}
             variant="outline"
             className="w-full flex items-center justify-center gap-2"
           >
@@ -144,53 +177,107 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
         </Card>
       )}
 
-      {/* Dialog de seleção do Google Drive */}
-      <Dialog open={isDriveOpen} onOpenChange={setIsDriveOpen}>
+      {/* Dialog do Google Drive — dois passos */}
+      <Dialog open={isDriveOpen} onOpenChange={handleCloseDrive}>
         <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
+              {driveStep === 'images' && (
+                <button
+                  onClick={() => setDriveStep('folders')}
+                  className="p-1 rounded hover:bg-muted transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              )}
               <HardDrive className="w-5 h-5" />
-              Selecionar imagem do Google Drive
+              {driveStep === 'folders'
+                ? 'Escolher pasta no Google Drive'
+                : `Imagens em "${selectedFolder.name}"`}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto space-y-2 mt-2">
-            {driveImages.isLoading && (
-              <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Carregando imagens...
-              </div>
-            )}
+          {/* Passo 1: Seleção de Pasta */}
+          {driveStep === 'folders' && (
+            <div className="flex-1 overflow-y-auto space-y-2 mt-2">
+              {foldersQuery.isLoading && (
+                <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Carregando pastas...
+                </div>
+              )}
 
-            {driveImages.isError && (
-              <div className="text-center py-8 text-destructive text-sm">
-                Erro ao carregar imagens do Drive. Verifique sua conexão.
-              </div>
-            )}
+              {foldersQuery.isError && (
+                <div className="text-center py-8 text-destructive text-sm">
+                  Erro ao carregar pastas. Verifique sua conexão.
+                </div>
+              )}
 
-            {driveImages.data?.files && driveImages.data.files.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
-                <ImageIcon className="w-8 h-8" />
-                <p className="text-sm">Nenhuma imagem encontrada no Drive.</p>
-              </div>
-            )}
+              {/* Opção: Raiz do Drive */}
+              {!foldersQuery.isLoading && (
+                <button
+                  onClick={() => handleSelectFolder(null, 'Meu Drive')}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted transition-colors text-left"
+                >
+                  <HardDrive className="w-5 h-5 text-primary flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">Meu Drive</p>
+                    <p className="text-xs text-muted-foreground">Todas as imagens</p>
+                  </div>
+                </button>
+              )}
 
-            {driveImages.data?.files?.map((file) => (
-              <button
-                key={file.id}
-                onClick={() => handleDriveFileSelect(file.id, file.name, file.mimeType)}
-                disabled={loadingFileId === file.id}
-                className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted transition-colors text-left disabled:opacity-60"
-              >
-                {loadingFileId === file.id ? (
-                  <Loader2 className="w-5 h-5 animate-spin text-primary flex-shrink-0" />
-                ) : (
-                  <ImageIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                )}
-                <span className="text-sm truncate">{file.name}</span>
-              </button>
-            ))}
-          </div>
+              {foldersQuery.data?.folders.map((folder) => (
+                <button
+                  key={folder.id}
+                  onClick={() => handleSelectFolder(folder.id, folder.name)}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted transition-colors text-left"
+                >
+                  <FolderOpen className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+                  <span className="text-sm truncate">{folder.name}</span>
+                </button>
+              ))}
+
+              {foldersQuery.data?.folders.length === 0 && !foldersQuery.isLoading && (
+                <p className="text-xs text-muted-foreground text-center py-2">Nenhuma subpasta encontrada.</p>
+              )}
+            </div>
+          )}
+
+          {/* Passo 2: Seleção de Imagem */}
+          {driveStep === 'images' && (
+            <div className="flex-1 overflow-y-auto space-y-2 mt-2">
+              {isImagesLoading && (
+                <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Carregando imagens...
+                </div>
+              )}
+
+              {!isImagesLoading && displayImages.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
+                  <ImageIcon className="w-8 h-8" />
+                  <p className="text-sm">Nenhuma imagem encontrada nesta pasta.</p>
+                </div>
+              )}
+
+              {displayImages.map((file) => (
+                <button
+                  key={file.id}
+                  onClick={() => handleDriveFileSelect(file.id, file.name, file.mimeType)}
+                  disabled={loadingFileId === file.id}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted transition-colors text-left disabled:opacity-60"
+                >
+                  {loadingFileId === file.id ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-primary flex-shrink-0" />
+                  ) : (
+                    <ImageIcon className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  )}
+                  <span className="text-sm truncate">{file.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
