@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -35,6 +35,7 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [folderDialog, setFolderDialog] = useState<{ open: boolean; item: GeneratedItem | null }>({ open: false, item: null });
   const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>(undefined);
+  const saveCallbackRef = useRef<{ resolve: () => void; reject: (e: Error) => void } | null>(null);
 
   const generateMutation = trpc.generation.generateImages.useMutation();
   const saveImageMutation = trpc.drive.saveImage.useMutation();
@@ -83,9 +84,15 @@ export default function Home() {
     }
   };
 
-  const handleSaveToGoogleDrive = (item: GeneratedItem) => {
-    setSelectedFolderId(undefined);
-    setFolderDialog({ open: true, item });
+  // Retorna uma Promise que só resolve após o usuário confirmar e a API responder com sucesso.
+  // Se o usuário fechar o dialog sem confirmar, a Promise é rejeitada silenciosamente
+  // para que GenerationResults não marque o item como salvo.
+  const handleSaveToGoogleDrive = (item: GeneratedItem): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      setSelectedFolderId(undefined);
+      saveCallbackRef.current = { resolve, reject };
+      setFolderDialog({ open: true, item });
+    });
   };
 
   const handleConfirmSave = async () => {
@@ -108,6 +115,9 @@ export default function Home() {
 
       toast.success(`Salvo no Google Drive: ${result.fileName}`);
       setFolderDialog({ open: false, item: null });
+      // Resolve a Promise — GenerationResults.handleSave marcará como salvo
+      saveCallbackRef.current?.resolve();
+      saveCallbackRef.current = null;
     } catch (error: any) {
       const msg = error?.message || '';
       if (msg.includes('login') || msg.includes('UNAUTHORIZED')) {
@@ -117,7 +127,21 @@ export default function Home() {
         toast.error('Erro ao salvar no Google Drive');
       }
       console.error(error);
+      // Rejeita a Promise — GenerationResults.handleSave não marcará como salvo
+      saveCallbackRef.current?.reject(error);
+      saveCallbackRef.current = null;
     }
+  };
+
+  // Chamado quando o dialog fecha sem confirmação (X ou clique fora)
+  const handleFolderDialogOpenChange = (open: boolean) => {
+    if (!open && saveCallbackRef.current) {
+      // Rejeita silenciosamente com erro marcado como "cancelamento"
+      const cancelError = new Error('cancelled');
+      saveCallbackRef.current.reject(cancelError);
+      saveCallbackRef.current = null;
+    }
+    setFolderDialog({ open, item: open ? folderDialog.item : null });
   };
 
   const handleDownload = (item: GeneratedItem) => {
@@ -334,7 +358,7 @@ export default function Home() {
       </div>
 
       {/* Dialog: Escolher pasta do Drive */}
-      <Dialog open={folderDialog.open} onOpenChange={(open) => setFolderDialog({ open, item: open ? folderDialog.item : null })}>
+      <Dialog open={folderDialog.open} onOpenChange={handleFolderDialogOpenChange}>
         <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -381,7 +405,7 @@ export default function Home() {
           </div>
 
           <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setFolderDialog({ open: false, item: null })}>
+            <Button variant="outline" onClick={() => handleFolderDialogOpenChange(false)}>
               Cancelar
             </Button>
             <Button

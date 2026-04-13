@@ -65,7 +65,6 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
   const handleOpenDrive = () => {
     setDriveStep('folders');
     setSelectedFolder({ id: null, name: 'Meu Drive' });
-    setFolderImages([]);
     setIsDriveOpen(true);
   };
 
@@ -100,7 +99,6 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
     if (!open) {
       setDriveStep('folders');
       setSelectedFolder({ id: null, name: 'Meu Drive' });
-      setFolderImages([]);
     }
   };
 

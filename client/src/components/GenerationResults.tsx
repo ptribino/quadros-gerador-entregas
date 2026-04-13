@@ -52,10 +52,16 @@ export default function GenerationResults({
     setSavingIds((prev) => new Set(prev).add(item.id));
     try {
       await onSaveToGoogleDrive(item);
+      // Só chega aqui se a Promise resolveu — ou seja, salvamento confirmado com sucesso
       setSavedIds((prev) => new Set(prev).add(item.id));
     } catch (error) {
-      toast.error('Erro ao salvar no Google Drive');
-      console.error(error);
+      // Cancelamento pelo usuário (fechar dialog sem confirmar) não exibe erro
+      const isCancelled = error instanceof Error && error.message === 'cancelled';
+      if (!isCancelled) {
+        toast.error('Erro ao salvar no Google Drive');
+        console.error(error);
+      }
+      // savedIds NÃO é atualizado — botão permanece habilitado para nova tentativa
     } finally {
       setSavingIds((prev) => {
         const next = new Set(prev);
