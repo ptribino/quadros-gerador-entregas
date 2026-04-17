@@ -13,7 +13,7 @@ import GenerationResults from '@/components/GenerationResults';
 
 type DeliveryType = 'lifestyle' | 'mockup' | 'video';
 type FrameType = 'pine' | 'aluminum';
-type EnvironmentType = 'scandinavian' | 'modern';
+type EnvironmentType = 'scandinavian' | 'modern' | 'corporate';
 
 interface GeneratedItem {
   id: string;
@@ -114,6 +114,8 @@ export default function Home() {
   const handleSaveToGoogleDrive = (item: GeneratedItem): Promise<void> => {
     return new Promise((resolve, reject) => {
       setSelectedFolderId(undefined);
+      setFolderLinkInput('');
+      setFolderLinkError('');
       saveCallbackRef.current = { resolve, reject };
       setFolderDialog({ open: true, item });
     });
@@ -327,6 +329,7 @@ export default function Home() {
                   {[
                     { value: 'scandinavian' as const, label: 'Escandinavo / Clean' },
                     { value: 'modern' as const, label: 'Moderno / Contemporâneo' },
+                    { value: 'corporate' as const, label: 'Corporativo' },
                   ].map((option) => (
                     <label key={option.value} className="flex items-center space-x-3 cursor-pointer group">
                       <input
