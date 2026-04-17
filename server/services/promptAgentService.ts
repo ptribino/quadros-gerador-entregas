@@ -4,7 +4,7 @@ import path from 'path';
 interface PromptVariation {
   type: 'lifestyle' | 'mockup' | 'video';
   frameType: 'pine' | 'aluminum';
-  environmentType?: 'scandinavian' | 'modern';
+  environmentType?: 'scandinavian' | 'modern' | 'corporate';
   prompt: string;
 }
 
@@ -42,6 +42,10 @@ class PromptAgentService {
           this.prompts.set('lifestyle-pine-modern', promptText);
         } else if (title.includes('Lifestyle') && title.includes('Alumínio') && title.includes('Moderno')) {
           this.prompts.set('lifestyle-aluminum-modern', promptText);
+        } else if (title.includes('Lifestyle') && title.includes('Pinho') && title.includes('Corporativo')) {
+          this.prompts.set('lifestyle-pine-corporate', promptText);
+        } else if (title.includes('Lifestyle') && title.includes('Alumínio') && title.includes('Corporativo')) {
+          this.prompts.set('lifestyle-aluminum-corporate', promptText);
         } else if (title.includes('Mockup') && title.includes('Pinho')) {
           this.prompts.set('mockup-pine', promptText);
         } else if (title.includes('Mockup') && title.includes('Alumínio')) {
@@ -65,10 +69,11 @@ class PromptAgentService {
     const envDescriptions = {
       scandinavian: 'Scandinavian living room, white plaster wall, light oak floating shelf below, ceramic vase with dried pampas grass, linen sofa in warm white, warm whites and sage green palette, eye-level wide shot, minimalist decor, not overly staged.',
       modern: 'Modern contemporary apartment living room, white walls, light concrete floor, low-profile modular sofa in light gray, indoor fiddle leaf fig plant, large window with soft diffused light, cool neutral palette with natural wood accents, wide angle eye-level shot, upscale residential feel, not a showroom.',
+      corporate: 'Modern corporate office environment, neutral tones, light gray or white walls, subtle professional decor, clean desk or credenza below, soft diffused natural and artificial light, gender-neutral and inclusive space suitable for any artwork, wide eye-level shot, polished yet welcoming professional atmosphere.',
     };
 
     for (const frame of ['pine', 'aluminum'] as const) {
-      for (const env of ['scandinavian', 'modern'] as const) {
+      for (const env of ['scandinavian', 'modern', 'corporate'] as const) {
         this.prompts.set(
           `lifestyle-${frame}-${env}`,
           `${envDescriptions[env]} Use the uploaded image as the artwork. Do not alter, reinterpret or stylize the artwork in any way — reproduce it exactly as provided. Place it as a framed print hanging on a wall. The frame should be thin and ${frameLabels[frame]}. Show the artwork clearly, with correct proportions and full visibility. Soft natural window light from the left. Lived-in authentic home feel — not a photoshoot, not a showroom. Editorial interior photography, 35mm lens, shallow depth of field, photorealistic. Aspect ratio 4:5.`
@@ -93,7 +98,7 @@ class PromptAgentService {
   getPrompt(
     deliveryType: 'lifestyle' | 'mockup' | 'video',
     frameType: 'pine' | 'aluminum',
-    environmentType?: 'scandinavian' | 'modern'
+    environmentType?: 'scandinavian' | 'modern' | 'corporate'
   ): string {
     let key: string;
 
@@ -122,7 +127,7 @@ class PromptAgentService {
     for (const deliveryType of deliveryTypes) {
       for (const frameType of ['pine', 'aluminum'] as const) {
         if (deliveryType === 'lifestyle') {
-          for (const environmentType of ['scandinavian', 'modern'] as const) {
+          for (const environmentType of ['scandinavian', 'modern', 'corporate'] as const) {
             prompts.push({
               type: deliveryType,
               frameType,
