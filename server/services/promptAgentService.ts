@@ -69,7 +69,7 @@ class PromptAgentService {
     const envDescriptions = {
       scandinavian: 'Scandinavian living room, white plaster wall, light oak floating shelf below, ceramic vase with dried pampas grass, linen sofa in warm white, warm whites and sage green palette, eye-level wide shot, minimalist decor, not overly staged.',
       modern: 'Modern contemporary apartment living room, white walls, light concrete floor, low-profile modular sofa in light gray, indoor fiddle leaf fig plant, large window with soft diffused light, cool neutral palette with natural wood accents, wide angle eye-level shot, upscale residential feel, not a showroom.',
-      corporate: 'Modern corporate office environment, neutral tones, light gray or white walls, subtle professional decor, clean desk or credenza below, soft diffused natural and artificial light, gender-neutral and inclusive space suitable for any artwork, wide eye-level shot, polished yet welcoming professional atmosphere.',
+      corporate: 'Upscale corporate office interior, executive meeting room or private office, white or light gray painted wall, sleek office desk or conference table visible in the foreground, ergonomic office chairs, subtle corporate decor — potted plant, stacked books, laptop — large window with soft natural light filtering through blinds, polished concrete or neutral carpet floor, professional and elegant atmosphere, gender-neutral environment.',
     };
 
     for (const frame of ['pine', 'aluminum'] as const) {
