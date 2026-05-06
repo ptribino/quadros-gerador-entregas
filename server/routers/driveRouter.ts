@@ -1,14 +1,15 @@
 import { z } from 'zod';
 import { protectedProcedure, router } from '../_core/trpc';
 import { googleDriveService } from '../services/googleDriveService';
-import { googleTokenStore } from '../_core/oauth';
+import { getGoogleTokens } from '../_core/oauth';
 import { TRPCError } from '@trpc/server';
 
 /**
- * Obtém o access_token do Google do usuário logado (do store em memória)
+ * Obtém o access_token do Google do usuário logado.
+ * Tenta cache em memória primeiro, depois cai no DB (sobrevive a restart do servidor).
  */
-function getUserAccessToken(openId: string): string {
-  const tokens = googleTokenStore.get(openId);
+async function getUserAccessToken(openId: string): Promise<string> {
+  const tokens = await getGoogleTokens(openId);
   if (!tokens?.accessToken) {
     throw new TRPCError({
       code: 'UNAUTHORIZED',
@@ -45,7 +46,7 @@ export const driveRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       try {
-        const accessToken = getUserAccessToken(ctx.user!.openId);
+        const accessToken = await getUserAccessToken(ctx.user!.openId);
         const { buffer, mimeType } = dataUrlToBuffer(input.imageUrl);
 
         const timestamp = new Date().toISOString().split('T')[0];
@@ -81,7 +82,7 @@ export const driveRouter = router({
     .input(z.object({ folderId: z.string().optional() }).optional())
     .query(async ({ input, ctx }) => {
     try {
-      const accessToken = getUserAccessToken(ctx.user!.openId);
+      const accessToken = await getUserAccessToken(ctx.user!.openId);
       const files = await googleDriveService.listFiles(accessToken, input?.folderId);
 
       return {
@@ -105,7 +106,7 @@ export const driveRouter = router({
 
   listFolders: protectedProcedure.query(async ({ ctx }) => {
     try {
-      const accessToken = getUserAccessToken(ctx.user!.openId);
+      const accessToken = await getUserAccessToken(ctx.user!.openId);
       const folders = await googleDriveService.listFolders(accessToken);
 
       return {
@@ -132,7 +133,7 @@ export const driveRouter = router({
     }))
     .query(async ({ input, ctx }) => {
       try {
-        const accessToken = getUserAccessToken(ctx.user!.openId);
+        const accessToken = await getUserAccessToken(ctx.user!.openId);
         const dataUrl = await googleDriveService.getFileContent(accessToken, input.fileId, input.mimeType);
         return { success: true, dataUrl };
       } catch (error) {

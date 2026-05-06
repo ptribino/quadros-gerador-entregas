@@ -6,9 +6,21 @@ import { ENV } from "./env";
 import { SignJWT } from "jose";
 import crypto from "crypto";
 
-// In-memory store para tokens do Google (por openId)
-// Usado pelo Drive para acessar o Google Drive do usuário
-export const googleTokenStore = new Map<string, { accessToken: string; refreshToken?: string }>();
+// Cache em memória dos tokens Google (write-through; fonte da verdade é a tabela `users`).
+// Mantido para latência baixa em requests sequenciais e como fallback se o DB cair.
+export const googleTokenStore = new Map<string, { accessToken: string; refreshToken?: string; expiresAt?: Date | null }>();
+
+/** Lê tokens do cache; se não houver, busca no DB e popula o cache. */
+export async function getGoogleTokens(openId: string) {
+  const cached = googleTokenStore.get(openId);
+  if (cached) return cached;
+  const persisted = await db.loadGoogleTokens(openId);
+  if (persisted) {
+    googleTokenStore.set(openId, persisted);
+    return persisted;
+  }
+  return undefined;
+}
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -161,10 +173,19 @@ export function registerOAuthRoutes(app: Express) {
         console.warn("[OAuth] DB upsert failed (non-fatal):", dbErr instanceof Error ? dbErr.message : dbErr);
       }
 
-      // 4. Guarda tokens Google em memória (para Google Drive)
+      // 4. Guarda tokens Google: cache em memória + persistência no DB.
+      const expiresAt = tokens.expires_in
+        ? new Date(Date.now() + tokens.expires_in * 1000)
+        : null;
       googleTokenStore.set(userInfo.sub, {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
+        expiresAt,
+      });
+      await db.saveGoogleTokens(userInfo.sub, {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresAt,
       });
 
       // 5. Cria JWT de sessão (apenas dados do usuário, sem tokens)

@@ -91,4 +91,42 @@ export async function getUserByOpenId(openId: string) {
   }
 }
 
-// TODO: add feature queries here as your schema grows.
+/**
+ * Persist Google OAuth tokens for a user.
+ * Falls back silently if the DB is unavailable — the in-memory cache in
+ * `googleTokenStore` keeps the current request working.
+ */
+export async function saveGoogleTokens(
+  openId: string,
+  tokens: { accessToken: string; refreshToken?: string; expiresAt?: Date | null },
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db
+      .update(users)
+      .set({
+        googleAccessToken: tokens.accessToken,
+        googleRefreshToken: tokens.refreshToken ?? undefined,
+        googleTokenExpiresAt: tokens.expiresAt ?? null,
+      })
+      .where(eq(users.openId, openId));
+  } catch (error) {
+    console.warn(
+      "[Database] saveGoogleTokens failed (non-fatal):",
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
+export async function loadGoogleTokens(
+  openId: string,
+): Promise<{ accessToken: string; refreshToken?: string; expiresAt?: Date | null } | undefined> {
+  const user = await getUserByOpenId(openId);
+  if (!user?.googleAccessToken) return undefined;
+  return {
+    accessToken: user.googleAccessToken,
+    refreshToken: user.googleRefreshToken ?? undefined,
+    expiresAt: user.googleTokenExpiresAt ?? null,
+  };
+}
