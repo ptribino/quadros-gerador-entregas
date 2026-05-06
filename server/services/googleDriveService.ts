@@ -113,15 +113,18 @@ class GoogleDriveService {
   }
 
   /**
-   * Lista pastas do Google Drive do usuário
+   * Lista pastas do Google Drive do usuário.
+   * Se parentFolderId for informado, retorna apenas subpastas dessa pasta.
    */
-  async listFolders(accessToken: string): Promise<GoogleDriveFile[]> {
+  async listFolders(accessToken: string, parentFolderId?: string): Promise<GoogleDriveFile[]> {
+    const baseQ = `mimeType = 'application/vnd.google-apps.folder' and trashed=false`;
+    const q = parentFolderId ? `${baseQ} and '${parentFolderId}' in parents` : baseQ;
     const params = new URLSearchParams({
       spaces: 'drive',
       fields: 'files(id,name,mimeType,webViewLink)',
       pageSize: '100',
       orderBy: 'name',
-      q: `mimeType = 'application/vnd.google-apps.folder' and trashed=false`,
+      q,
     });
 
     const response = await fetch(`${this.baseUrl}/files?${params}`, {

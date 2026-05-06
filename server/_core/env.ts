@@ -13,4 +13,6 @@ export const ENV = {
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
   googleRedirectUri: process.env.GOOGLE_REDIRECT_URI ?? "http://localhost:3000/api/oauth/google/callback",
   googleDriveFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID ?? "",
+  // Pasta raiz do banco de imagens "Catálogo Imagens" (origem do pipeline Tray)
+  driveBankFolderId: process.env.DRIVE_BANK_FOLDER_ID ?? "",
 };
