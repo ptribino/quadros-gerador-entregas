@@ -5,9 +5,10 @@
  *   - code3: 3 letras usadas no SKU (ex: QTK-001-FLO-...)
  *   - taxonomia Tray (Categoria Principal / Subcategoria)
  *
- * Uso:   pnpm tsx scripts/seedCategoryCodes.ts
+ * Uso:   pnpm db:seed:categories
  * Reexecutar é seguro: usa onDuplicateKeyUpdate.
  */
+import "dotenv/config";
 import { categoryCodes } from "../drizzle/schema";
 import { getDb } from "../server/db";
 
