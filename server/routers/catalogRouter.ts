@@ -92,7 +92,12 @@ export const catalogRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Categoria não encontrada" });
       }
 
-      const files = await googleDriveService.listFiles(accessToken, input.folderId);
+      // Recursivo: a pasta-mãe da categoria pode não ter imagens diretas,
+      // só sub-subpastas (ex: "#PN Paisagens Naturais" → #PN01 Cachoeiras → imagens).
+      const files = await googleDriveService.listImagesRecursive(accessToken, input.folderId, {
+        maxDepth: 3,
+        maxFiles: Math.max(input.count * 5, 50),
+      });
       const slice = files.slice(0, input.count);
       if (slice.length === 0) {
         return { processed: 0, succeeded: 0, failed: 0, skipped: 0, errors: [] };

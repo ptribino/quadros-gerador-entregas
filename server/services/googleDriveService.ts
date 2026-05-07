@@ -172,6 +172,44 @@ class GoogleDriveService {
   }
 
   /**
+   * Lista imagens recursivamente: começa em folderId, e se não houver
+   * imagens diretas, mergulha nas subpastas até maxDepth níveis.
+   * Necessário pro banco de imagens, onde a pasta-mãe da categoria
+   * (ex: "#PN Paisagens Naturais") não tem imagens, só sub-subpastas
+   * (#PN01 Cachoeiras, #PN02 Céu, etc.) que contêm os arquivos.
+   */
+  async listImagesRecursive(
+    accessToken: string,
+    folderId: string,
+    options: { maxDepth?: number; maxFiles?: number } = {},
+  ): Promise<GoogleDriveFile[]> {
+    const maxDepth = options.maxDepth ?? 3;
+    const maxFiles = options.maxFiles ?? 500;
+
+    const out: GoogleDriveFile[] = [];
+    const queue: { id: string; depth: number }[] = [{ id: folderId, depth: 0 }];
+
+    while (queue.length > 0 && out.length < maxFiles) {
+      const { id, depth } = queue.shift()!;
+
+      const files = await this.listFiles(accessToken, id);
+      for (const f of files) {
+        if (out.length >= maxFiles) break;
+        out.push(f);
+      }
+
+      if (depth >= maxDepth) continue;
+
+      const subfolders = await this.listFolders(accessToken, id);
+      for (const sub of subfolders) {
+        queue.push({ id: sub.id, depth: depth + 1 });
+      }
+    }
+
+    return out;
+  }
+
+  /**
    * Baixa o conteúdo de um arquivo do Drive e retorna como base64
    */
   async getFileContent(accessToken: string, fileId: string, mimeType: string): Promise<string> {
