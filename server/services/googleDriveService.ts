@@ -172,6 +172,102 @@ class GoogleDriveService {
   }
 
   /**
+   * Cria uma pasta dentro de um pai (ou na raiz do Drive se parentId
+   * não informado). Idempotente por nome: se já existir uma pasta com
+   * mesmo nome no mesmo pai, retorna a existente.
+   */
+  async getOrCreateFolder(
+    accessToken: string,
+    name: string,
+    parentId?: string,
+  ): Promise<GoogleDriveFile> {
+    const folderType = "application/vnd.google-apps.folder";
+    // Procura existente
+    const escaped = name.replace(/'/g, "\\'");
+    const baseQ = `mimeType = '${folderType}' and name = '${escaped}' and trashed = false`;
+    const q = parentId ? `${baseQ} and '${parentId}' in parents` : baseQ;
+    const findRes = await fetch(
+      `${this.baseUrl}/files?${new URLSearchParams({
+        q,
+        fields: "files(id,name,mimeType,webViewLink)",
+        pageSize: "1",
+        supportsAllDrives: "true",
+        includeItemsFromAllDrives: "true",
+      })}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (findRes.ok) {
+      const data = (await findRes.json()) as { files: GoogleDriveFile[] };
+      if (data.files && data.files.length > 0) return data.files[0];
+    }
+
+    // Cria
+    const createRes = await fetch(
+      `${this.baseUrl}/files?supportsAllDrives=true&fields=id,name,mimeType,webViewLink`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          mimeType: folderType,
+          parents: parentId ? [parentId] : undefined,
+        }),
+      },
+    );
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      throw new Error(`Drive create folder failed (${createRes.status}): ${errText}`);
+    }
+    return createRes.json() as Promise<GoogleDriveFile>;
+  }
+
+  /** Define permissão "qualquer pessoa com link pode ler". */
+  async makePublic(accessToken: string, fileId: string): Promise<void> {
+    const res = await fetch(
+      `${this.baseUrl}/files/${fileId}/permissions?supportsAllDrives=true`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ role: "reader", type: "anyone" }),
+      },
+    );
+    if (!res.ok && res.status !== 409) {
+      // 409 = permissão já existe — ok, é idempotente
+      const errText = await res.text();
+      throw new Error(`Drive makePublic failed (${res.status}): ${errText}`);
+    }
+  }
+
+  /** Baixa um arquivo do Drive como Buffer (para reupload em outra pasta). */
+  async downloadFile(accessToken: string, fileId: string): Promise<Buffer> {
+    const res = await fetch(
+      `${this.baseUrl}/files/${fileId}?alt=media&supportsAllDrives=true`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Drive download failed (${res.status}): ${errText}`);
+    }
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  /**
+   * URL "uc?export=download&id=..." que a Tray consegue baixar como imagem
+   * direta — desde que o arquivo seja público (`makePublic`).
+   * `view`-style URLs retornam HTML preview, então a Tray falha; daí o
+   * formato `uc?export=download` ser obrigatório.
+   */
+  publicDownloadUrl(fileId: string): string {
+    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+  }
+
+  /**
    * Lista imagens recursivamente: começa em folderId, e se não houver
    * imagens diretas, mergulha nas subpastas até maxDepth níveis.
    * Necessário pro banco de imagens, onde a pasta-mãe da categoria

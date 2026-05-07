@@ -135,6 +135,14 @@ export const products = mysqlTable(
     status: mysqlEnum("status", productStatusEnum).default("suggested").notNull(),
     errorMessage: text("errorMessage"),
 
+    // Fila de geração de imagens (Passo 2)
+    genQueuedAt: timestamp("genQueuedAt"),
+    genStartedAt: timestamp("genStartedAt"),
+    genCompletedAt: timestamp("genCompletedAt"),
+    genStep: int("genStep"), // 1..3 — última etapa concluída pelo worker
+    genAttempts: int("genAttempts").default(0).notNull(),
+    genError: text("genError"),
+
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
     approvedAt: timestamp("approvedAt"),

@@ -15,4 +15,6 @@ export const ENV = {
   googleDriveFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID ?? "",
   // Pasta raiz do banco de imagens "Catálogo Imagens" (origem do pipeline Tray)
   driveBankFolderId: process.env.DRIVE_BANK_FOLDER_ID ?? "",
+  // Pasta destino onde o pipeline cria as pastas [SKU] de cada produto
+  driveDestinationFolderId: process.env.DRIVE_DESTINATION_FOLDER_ID ?? "",
 };

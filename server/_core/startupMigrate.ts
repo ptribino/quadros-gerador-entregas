@@ -237,6 +237,25 @@ async function ensureSchema(pool: mysql.Pool) {
     )
   `);
 
+  // Colunas de fila de geração (Passo 2). ALTER IGNORE-style: cada um
+  // tenta criar e ignora se já existe (errno 1060 = duplicate column).
+  for (const stmt of [
+    "ALTER TABLE products ADD COLUMN genQueuedAt timestamp NULL",
+    "ALTER TABLE products ADD COLUMN genStartedAt timestamp NULL",
+    "ALTER TABLE products ADD COLUMN genCompletedAt timestamp NULL",
+    "ALTER TABLE products ADD COLUMN genStep int NULL",
+    "ALTER TABLE products ADD COLUMN genAttempts int NOT NULL DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN genError text NULL",
+  ]) {
+    try {
+      await pool.query(stmt);
+    } catch (err: any) {
+      if (err?.errno !== 1060) {
+        console.warn("[startupMigrate] DDL falhou:", stmt, "→", err?.message);
+      }
+    }
+  }
+
   // Backfill: encurta SKUs e modelos longos (formato antigo
   // "QTK - 001 - ABS - APC - 01 - Nome Longo Do Produto" → "QTK - 001 - ABS - APC - 01").
   // Idempotente: depois da primeira execução o WHERE não casa mais nada.
