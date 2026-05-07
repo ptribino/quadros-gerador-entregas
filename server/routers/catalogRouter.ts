@@ -375,60 +375,61 @@ export const catalogRouter = router({
         .where(and(...conditions))
         .orderBy(desc(products.aiPotencialVenda), desc(products.createdAt));
 
+      // Layout EXATO de Catalogo_Quadros_Tray_COM_IMAGENS.xlsx — 25 colunas.
+      // A Tray faz match por POSIÇÃO de coluna, não por nome do header,
+      // então as colunas "Não importar" precisam existir mesmo vazias para
+      // que os campos seguintes caiam na posição esperada.
       const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet("Produtos");
+      const ws = wb.addWorksheet("Catálogo - Tray");
       ws.columns = [
-        { header: "Referência (código fornecedor)", key: "sku", width: 30 },
-        { header: "Nome do produto", key: "nome", width: 50 },
-        { header: "Exibir produto ativo", key: "ativo", width: 14 },
-        { header: "Exibir na loja", key: "naLoja", width: 12 },
-        { header: "Categoria Principal", key: "catPrincipal", width: 22 },
-        { header: "Subcategoria", key: "subcategoria", width: 22 },
-        { header: "Subsubcategoria (nível 3)", key: "subsub", width: 22 },
-        { header: "HTML da descrição completa", key: "html", width: 80 },
-        { header: "Preço de venda em reais", key: "preco", width: 14 },
-        { header: "Estoque do produto", key: "estoque", width: 12 },
-        { header: "Marca", key: "marca", width: 16 },
-        { header: "Modelo", key: "modelo", width: 30 },
-        { header: "Código EAN/GTIN/UPC", key: "ean", width: 18 },
-        { header: "Tempo de garantia", key: "garantia", width: 14 },
-        { header: "Peso do produto (gramas)", key: "peso", width: 14 },
-        { header: "Altura (cm)", key: "altura", width: 10 },
-        { header: "Largura (cm)", key: "largura", width: 10 },
-        { header: "Comprimento (cm)", key: "comprimento", width: 14 },
-        { header: "URL da imagem Principal", key: "img1", width: 50 },
-        { header: "URL segunda imagem", key: "img2", width: 50 },
-        { header: "URL terceira imagem", key: "img3", width: 50 },
-        { header: "URL quarta imagem", key: "img4", width: 50 },
-        { header: "URL quinta imagem", key: "img5", width: 50 },
+        { header: "Referência (código fornecedor)", key: "sku", width: 60 },         // 1
+        { header: "Não importar os dados da coluna", key: "skip1", width: 4 },       // 2
+        { header: "Não importar os dados da coluna", key: "skip2", width: 4 },       // 3
+        { header: "Código do produto (ID)", key: "id", width: 14 },                  // 4 (numérico)
+        { header: "Nome do produto", key: "nome", width: 60 },                       // 5
+        { header: "Não importar os dados da coluna", key: "skip3", width: 4 },       // 6
+        { header: "Preço de venda em reais", key: "precoVenda", width: 16 },         // 7
+        { header: "Não importar os dados da coluna", key: "skip4", width: 4 },       // 8
+        { header: "Preço de custo em reais", key: "precoCusto", width: 16 },         // 9
+        { header: "Estoque do produto", key: "estoque", width: 12 },                 // 10
+        { header: "Exibir produto ativo", key: "ativo", width: 14 },                 // 11
+        { header: "Não importar os dados da coluna", key: "skip5", width: 4 },       // 12
+        { header: "Não importar os dados da coluna", key: "skip6", width: 4 },       // 13
+        { header: "Não importar os dados da coluna", key: "skip7", width: 4 },       // 14
+        { header: "NCM do produto", key: "ncm", width: 14 },                         // 15
+        { header: "Código EAN/GTIN/UPC", key: "ean", width: 18 },                    // 16
+        { header: "Prazo de disponibilidade", key: "prazo", width: 14 },             // 17
+        { header: "SEO - Endereço do produto (URL)", key: "slug", width: 50 },       // 18
+        { header: "Peso do produto (gramas)", key: "peso", width: 14 },              // 19
+        { header: "Largura (cm)", key: "largura", width: 10 },                       // 20
+        { header: "Altura (cm)", key: "altura", width: 10 },                         // 21
+        { header: "Comprimento (cm)", key: "comprimento", width: 14 },               // 22
+        { header: "Imagem_Mapeada", key: "imagemMapeada", width: 50 },               // 23 (custom)
+        { header: "Pasta_Drive", key: "pastaDrive", width: 60 },                     // 24 (custom)
+        { header: "Status_Imagem", key: "statusImagem", width: 16 },                 // 25 (custom)
       ];
       ws.getRow(1).font = { bold: true };
 
-      for (const { p, c } of rows) {
+      for (const { p } of rows) {
         ws.addRow({
           sku: p.sku,
+          id: 1000 + p.id, // numérico — exigido pela validação da Tray na posição 4
           nome: p.nome,
-          ativo: p.exibirAtivo ? "Sim" : "Não",
-          naLoja: p.exibirNaLoja ? "Sim" : "Não",
-          catPrincipal: c?.trayCategoriaPrincipal ?? "Quadros Decorativos",
-          subcategoria: c?.traySubcategoria ?? "",
-          subsub: c?.traySubsubcategoria ?? "",
-          html: p.descricaoHtml ?? "",
-          preco: Number(p.precoVenda),
+          precoVenda: Number(p.precoVenda),
+          precoCusto: Number(p.precoCusto),
           estoque: p.estoque,
-          marca: p.marca,
-          modelo: p.modelo ?? p.sku,
+          ativo: p.exibirAtivo ? 1 : 0,
+          ncm: p.ncm,
           ean: p.ean ?? "",
-          garantia: p.tempoGarantia,
+          prazo: p.prazoDisponibilidade,
+          slug: p.slugSeo ?? "",
           peso: p.pesoGramas,
-          altura: Number(p.alturaCm),
           largura: Number(p.larguraCm),
+          altura: Number(p.alturaCm),
           comprimento: Number(p.comprimentoCm),
-          img1: p.imageUrl1 ?? "",
-          img2: p.imageUrl2 ?? "",
-          img3: p.imageUrl3 ?? "",
-          img4: p.imageUrl4 ?? "",
-          img5: p.imageUrl5 ?? "",
+          imagemMapeada: p.sourceDriveFileId ?? "",
+          pastaDrive: p.productDriveFolderUrl ?? p.sourceDriveFileUrl ?? "",
+          statusImagem: p.productDriveFolderId ? "✅ Mapeado" : "⏳ Pendente",
         });
       }
 
