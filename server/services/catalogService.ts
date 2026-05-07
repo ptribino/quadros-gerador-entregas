@@ -19,23 +19,25 @@ export function buildSlug(nome: string): string {
 }
 
 /**
- * Padrão observado em Catalogo_Quadros_Tray_COM_IMAGENS.xlsx:
- *   "QTK - 001 - ABS - APC - 01 - Abstrato Boho Pastel"
- * Neste primeiro corte o subcódigo (sub3) replica o cat3 — variações
- * mais finas surgem quando o catálogo tiver subdivisões reais.
+ * SKU compacto: `QTK - 001 - ABS - APC - 01`.
+ * O nome do produto NÃO entra no SKU (fica no campo "Nome do produto");
+ * isso mantém Modelo/Referência curtos o bastante pra todos os campos
+ * do painel da Tray e não trunca em listagens.
+ *
+ * `args.nome` é mantido na assinatura por compat — não é usado no SKU.
  */
 export function buildSku(args: {
   cat3: string;
   sub3?: string;
   seq: number;
   variant?: number;
-  nome: string;
+  nome?: string;
 }): string {
   const sub3 = (args.sub3 || args.cat3).toUpperCase().padEnd(3, "X").slice(0, 3);
   const cat3 = args.cat3.toUpperCase().padEnd(3, "X").slice(0, 3);
   const seq = String(args.seq).padStart(3, "0");
   const variant = String(args.variant ?? 1).padStart(2, "0");
-  return `QTK - ${seq} - ${cat3} - ${sub3} - ${variant} - ${args.nome}`;
+  return `QTK - ${seq} - ${cat3} - ${sub3} - ${variant}`;
 }
 
 // ---------- IA: análise de uma imagem ----------

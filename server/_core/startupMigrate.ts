@@ -237,5 +237,29 @@ async function ensureSchema(pool: mysql.Pool) {
     )
   `);
 
+  // Backfill: encurta SKUs e modelos longos (formato antigo
+  // "QTK - 001 - ABS - APC - 01 - Nome Longo Do Produto" → "QTK - 001 - ABS - APC - 01").
+  // Idempotente: depois da primeira execução o WHERE não casa mais nada.
+  try {
+    const [skuRes]: any = await pool.query(
+      `UPDATE products SET sku = SUBSTRING_INDEX(sku, ' - ', 5)
+       WHERE sku LIKE '% - % - % - % - % - %'`,
+    );
+    const [modeloRes]: any = await pool.query(
+      `UPDATE products SET modelo = SUBSTRING_INDEX(modelo, ' - ', 5)
+       WHERE modelo LIKE '% - % - % - % - % - %'`,
+    );
+    if (skuRes?.affectedRows || modeloRes?.affectedRows) {
+      console.log(
+        `[startupMigrate] Backfill SKU: ${skuRes?.affectedRows ?? 0} skus, ${modeloRes?.affectedRows ?? 0} modelos encurtados`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      "[startupMigrate] Backfill SKU falhou (não fatal):",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   console.log("[startupMigrate] ensureSchema OK");
 }
