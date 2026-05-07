@@ -5,6 +5,10 @@ interface GoogleDriveFile {
   name: string;
   mimeType: string;
   webViewLink: string;
+  shortcutDetails?: {
+    targetId: string;
+    targetMimeType: string;
+  };
 }
 
 class GoogleDriveService {
@@ -84,14 +88,18 @@ class GoogleDriveService {
   }
 
   /**
-   * Lista arquivos do Google Drive do usuário
+   * Lista arquivos do Google Drive do usuário.
+   * Inclui suporte a Shared Drives (necessário quando a pasta de origem
+   * vive num drive compartilhado externo, comum no fluxo de banco de imagens).
    */
   async listFiles(accessToken: string, folderId?: string): Promise<GoogleDriveFile[]> {
     const params = new URLSearchParams({
-      spaces: 'drive',
       fields: 'files(id,name,mimeType,webViewLink)',
       pageSize: '100',
       orderBy: 'createdTime desc',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+      corpora: 'allDrives',
     });
 
     const query = folderId
@@ -115,13 +123,21 @@ class GoogleDriveService {
   /**
    * Lista pastas do Google Drive do usuário.
    * Se parentFolderId for informado, retorna apenas subpastas dessa pasta.
+   *
+   * Inclui também atalhos (shortcuts) que apontam para pastas — necessário
+   * quando o "banco" do usuário é uma pasta cheia de atalhos para um drive
+   * compartilhado externo. Para shortcuts, o `id` retornado é o `targetId`
+   * (a pasta real), o nome continua sendo o do shortcut.
    */
   async listFolders(accessToken: string, parentFolderId?: string): Promise<GoogleDriveFile[]> {
-    const baseQ = `mimeType = 'application/vnd.google-apps.folder' and trashed=false`;
+    const folderType = "application/vnd.google-apps.folder";
+    const shortcutType = "application/vnd.google-apps.shortcut";
+    // Inclui pastas reais E atalhos (filtramos os atalhos que apontam para pasta depois)
+    const baseQ = `(mimeType = '${folderType}' or mimeType = '${shortcutType}') and trashed=false`;
     const q = parentFolderId ? `${baseQ} and '${parentFolderId}' in parents` : baseQ;
     const params = new URLSearchParams({
       spaces: 'drive',
-      fields: 'files(id,name,mimeType,webViewLink)',
+      fields: 'files(id,name,mimeType,webViewLink,shortcutDetails)',
       pageSize: '100',
       orderBy: 'name',
       q,
@@ -137,7 +153,22 @@ class GoogleDriveService {
     }
 
     const data = await response.json() as { files: GoogleDriveFile[] };
-    return data.files || [];
+    const all = data.files || [];
+
+    // Normaliza: para shortcuts que apontam para pasta, usa o targetId como id.
+    // Atalhos que apontam para outro tipo de item são descartados.
+    return all.flatMap((f) => {
+      if (f.mimeType === folderType) return [f];
+      if (f.mimeType === shortcutType && f.shortcutDetails?.targetMimeType === folderType) {
+        return [{
+          id: f.shortcutDetails.targetId,
+          name: f.name,
+          mimeType: folderType,
+          webViewLink: f.webViewLink,
+        }];
+      }
+      return [];
+    });
   }
 
   /**
