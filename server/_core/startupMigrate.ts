@@ -67,8 +67,21 @@ export async function runStartupMigrations() {
     const db = drizzle(connection);
 
     console.log("[startupMigrate] Aplicando migrations de", migrationsFolder);
-    await migrate(db, { migrationsFolder });
-    console.log("[startupMigrate] Migrations OK");
+    try {
+      await migrate(db, { migrationsFolder });
+      console.log("[startupMigrate] Migrations Drizzle OK");
+    } catch (migrateErr) {
+      // Falha comum: migrations 0000/0001 foram aplicadas fora do controle
+      // do drizzle (ex: db:push antigo). Aí o migrate tenta tudo de novo e
+      // bate em "Table already exists". Logamos e seguimos pro fallback DDL.
+      const msg = migrateErr instanceof Error ? migrateErr.message : String(migrateErr);
+      console.warn("[startupMigrate] migrate() falhou — tentando fallback DDL idempotente.");
+      console.warn("[startupMigrate] motivo:", msg);
+    }
+
+    // Fallback DDL idempotente — garante o schema necessário pro catálogo
+    // mesmo que `migrate()` não tenha rodado por causa de drift histórico.
+    await ensureSchema(db);
 
     // Seed idempotente das categorias
     let inserted = 0;
@@ -82,16 +95,105 @@ export async function runStartupMigrations() {
               trayCategoriaPrincipal = VALUES(trayCategoriaPrincipal),
               traySubcategoria = VALUES(traySubcategoria)`,
       );
-      // affectedRows: 1 = inserido, 2 = atualizado, 0 = noop
       if (result?.[0]?.affectedRows === 1) inserted += 1;
     }
-    console.log(`[startupMigrate] Seed categorias OK (${inserted} novas, ${SEEDS.length - inserted} já existiam)`);
-  } catch (err) {
-    console.error(
-      "[startupMigrate] Falha (não fatal — servidor continua):",
-      err instanceof Error ? err.message : err,
+    console.log(
+      `[startupMigrate] Seed categorias OK (${inserted} novas, ${SEEDS.length - inserted} já existiam)`,
     );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error && err.stack ? err.stack : "";
+    console.error("[startupMigrate] Falha (não fatal — servidor continua)");
+    console.error("[startupMigrate] erro:", msg);
+    if (stack) console.error("[startupMigrate] stack:", stack);
   } finally {
     if (connection) await connection.end().catch(() => {});
   }
+}
+
+/**
+ * Garante que as colunas/tabelas necessárias existem.
+ * Cada statement é idempotente (IF NOT EXISTS / IGNORE) — seguro de rodar
+ * a cada boot mesmo quando o schema já está completo.
+ */
+async function ensureSchema(db: any) {
+  // 1. Coluna googleTokenExpiresAt em users (parte da migration 0002)
+  try {
+    await db.execute(
+      sql`ALTER TABLE users ADD COLUMN googleTokenExpiresAt timestamp NULL`,
+    );
+    console.log("[startupMigrate] DDL: users.googleTokenExpiresAt criada");
+  } catch (err) {
+    // 1060 = duplicate column. Qualquer outro erro é re-logado.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/duplicate column|errno: 1060/i.test(msg)) {
+      console.warn("[startupMigrate] DDL users alter falhou:", msg);
+    }
+  }
+
+  // 2. Tabela category_codes
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS category_codes (
+      id int AUTO_INCREMENT NOT NULL,
+      folderName varchar(255) NOT NULL,
+      displayName varchar(255) NOT NULL,
+      code3 varchar(3) NOT NULL,
+      trayCategoriaPrincipal varchar(255) NOT NULL,
+      traySubcategoria varchar(255),
+      traySubsubcategoria varchar(255),
+      driveFolderId varchar(128),
+      createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY category_codes_folderName_idx (folderName),
+      UNIQUE KEY category_codes_code3_idx (code3)
+    )
+  `);
+
+  // 3. Tabela products
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS products (
+      id int AUTO_INCREMENT NOT NULL,
+      userId int NOT NULL,
+      categoryCodeId int,
+      sku varchar(128) NOT NULL,
+      nome varchar(255) NOT NULL,
+      descricaoHtml text,
+      slugSeo varchar(255),
+      precoVenda decimal(10,2) NOT NULL DEFAULT '199.90',
+      precoCusto decimal(10,2) NOT NULL DEFAULT '89.90',
+      estoque int NOT NULL DEFAULT 99,
+      ncm varchar(20) NOT NULL DEFAULT '4911.99.90',
+      prazoDisponibilidade int NOT NULL DEFAULT 7,
+      pesoGramas int NOT NULL DEFAULT 1200,
+      larguraCm decimal(6,2) NOT NULL DEFAULT '62.00',
+      alturaCm decimal(6,2) NOT NULL DEFAULT '32.00',
+      comprimentoCm decimal(6,2) NOT NULL DEFAULT '3.00',
+      marca varchar(128) NOT NULL DEFAULT 'Qtok Quadros',
+      modelo varchar(128),
+      ean varchar(32),
+      tempoGarantia varchar(64) NOT NULL DEFAULT '30 dias',
+      exibirAtivo boolean NOT NULL DEFAULT true,
+      exibirNaLoja boolean NOT NULL DEFAULT true,
+      sourceDriveFileId varchar(128),
+      sourceDriveFileUrl text,
+      productDriveFolderId varchar(128),
+      productDriveFolderUrl text,
+      imageUrl1 text, imageUrl2 text, imageUrl3 text, imageUrl4 text, imageUrl5 text,
+      aiPotencialVenda int,
+      aiPalavrasChave text,
+      aiPublicoAlvo text,
+      status enum('suggested','approved','generating','generated','exported','rejected','error') NOT NULL DEFAULT 'suggested',
+      errorMessage text,
+      createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      approvedAt timestamp NULL,
+      generatedAt timestamp NULL,
+      exportedAt timestamp NULL,
+      PRIMARY KEY (id),
+      UNIQUE KEY products_sku_idx (sku)
+    )
+  `);
+
+  console.log("[startupMigrate] ensureSchema OK");
 }
