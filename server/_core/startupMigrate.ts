@@ -83,7 +83,7 @@ export async function runStartupMigrations() {
 
     // Fallback DDL idempotente — garante o schema necessário pro catálogo
     // mesmo que `migrate()` não tenha rodado por causa de drift histórico.
-    await ensureSchema(db);
+    await ensureSchema(pool);
 
     // Seed idempotente das categorias
     let inserted = 0;
@@ -117,26 +117,31 @@ export async function runStartupMigrations() {
 
 /**
  * Garante que as colunas/tabelas necessárias existem.
- * Cada statement é idempotente (IF NOT EXISTS / IGNORE) — seguro de rodar
- * a cada boot mesmo quando o schema já está completo.
+ * Usa pool.query() raw (NÃO drizzle.execute) porque MySQL não aceita
+ * DDL via prepared statement — drizzle.execute prepara a query e
+ * o erro vinha vazio, dificultando o diagnóstico.
  */
-async function ensureSchema(db: any) {
+async function ensureSchema(pool: mysql.Pool) {
   // 1. Coluna googleTokenExpiresAt em users (parte da migration 0002)
   try {
-    await db.execute(
-      sql`ALTER TABLE users ADD COLUMN googleTokenExpiresAt timestamp NULL`,
+    await pool.query(
+      "ALTER TABLE users ADD COLUMN googleTokenExpiresAt timestamp NULL",
     );
     console.log("[startupMigrate] DDL: users.googleTokenExpiresAt criada");
-  } catch (err) {
-    // 1060 = duplicate column. Qualquer outro erro é re-logado.
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!/duplicate column|errno: 1060/i.test(msg)) {
-      console.warn("[startupMigrate] DDL users alter falhou:", msg);
+  } catch (err: any) {
+    // 1060 = duplicate column (já existe). Qualquer outro erro é re-logado.
+    if (err?.errno !== 1060) {
+      console.warn(
+        "[startupMigrate] DDL users alter falhou:",
+        err?.message || err,
+        "errno:",
+        err?.errno,
+      );
     }
   }
 
   // 2. Tabela category_codes
-  await db.execute(sql`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS category_codes (
       id int AUTO_INCREMENT NOT NULL,
       folderName varchar(255) NOT NULL,
@@ -155,7 +160,7 @@ async function ensureSchema(db: any) {
   `);
 
   // 3. Tabela products
-  await db.execute(sql`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS products (
       id int AUTO_INCREMENT NOT NULL,
       userId int NOT NULL,
