@@ -66,6 +66,11 @@ export async function runStartupMigrations() {
     // createPool aceita o formato de URL que drizzle usa internamente
     // (createConnection é mais restrito quanto ao formato da URL).
     pool = mysql.createPool(url);
+
+    // Retry com backoff: em produção (Railway) o app bota antes do MySQL
+    // estar pronto, gerando ECONNREFUSED no primeiro PING. Tenta até ~30s.
+    await waitForDatabase(pool);
+
     const db = drizzle(pool);
 
     console.log("[startupMigrate] Aplicando migrations de", migrationsFolder);
@@ -112,6 +117,34 @@ export async function runStartupMigrations() {
     if (stack) console.error("[startupMigrate] stack:", stack);
   } finally {
     if (pool) await pool.end().catch(() => {});
+  }
+}
+
+/**
+ * Aguarda o MySQL aceitar conexões. No Railway o app sobe antes do DB
+ * — sem isso o startupMigrate falha com ECONNREFUSED no primeiro boot.
+ */
+async function waitForDatabase(pool: mysql.Pool) {
+  const maxAttempts = 8;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await pool.query("SELECT 1");
+      if (attempt > 1) {
+        console.log(`[startupMigrate] DB pronto na tentativa ${attempt}.`);
+      }
+      return;
+    } catch (err: any) {
+      if (attempt === maxAttempts) {
+        throw new Error(
+          `DB inacessível após ${maxAttempts} tentativas (último code=${err?.code}): ${err?.message || err}`,
+        );
+      }
+      const waitMs = Math.min(1000 * Math.pow(1.5, attempt - 1), 5000);
+      console.log(
+        `[startupMigrate] DB não pronto (${err?.code || "?"}), tentando de novo em ${waitMs}ms...`,
+      );
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
   }
 }
 
