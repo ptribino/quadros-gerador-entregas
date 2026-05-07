@@ -222,6 +222,13 @@ export default function Home() {
             <p className="text-sm text-muted-foreground">Gere imagens e vídeos para e-commerce de quadros decorativos</p>
           </div>
           <div className="flex items-center gap-3">
+            <Button
+              onClick={() => (window.location.href = "/catalogo")}
+              variant="outline"
+              size="sm"
+            >
+              Curadoria de catálogo →
+            </Button>
             <span className="text-sm text-muted-foreground hidden md:inline">
               {user?.name || user?.email}
             </span>

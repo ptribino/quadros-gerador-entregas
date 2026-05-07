@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -81,6 +81,40 @@ export default function CatalogPage() {
     onSuccess: downloadFromMutation,
     onError: (err) => toast.error(err.message),
   });
+
+  // Status global da fila + polling enquanto há trabalho em andamento.
+  const generationStatusQuery = trpc.catalog.generationStatus.useQuery(undefined, {
+    enabled: Boolean(user),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return data && (data.queued > 0 || data.running > 0) ? 4000 : false;
+    },
+  });
+
+  const enqueueMutation = trpc.catalog.enqueueGeneration.useMutation({
+    onSuccess: (res) => {
+      toast.success(`${res.queued} produtos enfileirados para geração`);
+      utils.catalog.listSuggestions.invalidate();
+      utils.catalog.generationStatus.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Mantém a tabela atualizada enquanto o worker processa.
+  const isWorking =
+    (generationStatusQuery.data?.queued ?? 0) +
+      (generationStatusQuery.data?.running ?? 0) >
+    0;
+  trpc.catalog.listSuggestions.useQuery(
+    {
+      status: statusFilter === "all" ? undefined : (statusFilter as any),
+      categoryCodeId: categoryId ? Number(categoryId) : undefined,
+    },
+    {
+      enabled: Boolean(user) && isWorking,
+      refetchInterval: isWorking ? 5000 : false,
+    },
+  );
 
   const folderByName = useMemo(() => {
     const map = new Map<number, { id: string; name: string } | null>();
@@ -256,6 +290,17 @@ export default function CatalogPage() {
             </Button>
             <Button
               size="sm"
+              variant="secondary"
+              disabled={selectedIds.size === 0 || enqueueMutation.isPending}
+              onClick={() =>
+                enqueueMutation.mutate({ productIds: Array.from(selectedIds) })
+              }
+              title="Enfileira os selecionados para gerar 3 imagens cada (lifestyle + profissional + mockup)"
+            >
+              {enqueueMutation.isPending ? "..." : "Gerar imagens"}
+            </Button>
+            <Button
+              size="sm"
               variant="outline"
               disabled={exportMutation.isPending}
               onClick={() =>
@@ -287,6 +332,15 @@ export default function CatalogPage() {
           </div>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
+          {generationStatusQuery.data && (generationStatusQuery.data.queued + generationStatusQuery.data.running) > 0 && (
+            <div className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+              <span className="font-medium">Fila:</span>{" "}
+              {generationStatusQuery.data.running} em processamento ·{" "}
+              {generationStatusQuery.data.queued} aguardando ·{" "}
+              {generationStatusQuery.data.done} prontos ·{" "}
+              {generationStatusQuery.data.errored} com erro
+            </div>
+          )}
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-xs uppercase text-muted-foreground">
               <tr>
@@ -295,6 +349,7 @@ export default function CatalogPage() {
                 <th className="px-3 py-2 text-left">Nome</th>
                 <th className="px-3 py-2 text-center">Potencial</th>
                 <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Geração</th>
                 <th className="px-3 py-2 text-left">Origem</th>
               </tr>
             </thead>
@@ -305,6 +360,7 @@ export default function CatalogPage() {
                     <Checkbox
                       checked={selectedIds.has(p.id)}
                       onCheckedChange={() => toggleSelect(p.id)}
+                      className="size-5 border-2 border-foreground/40 data-[state=checked]:border-primary"
                     />
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">{p.sku}</td>
@@ -317,8 +373,20 @@ export default function CatalogPage() {
                   <td className="px-3 py-2">
                     <Badge variant={statusVariant(p.status)}>{p.status}</Badge>
                   </td>
+                  <td className="px-3 py-2 text-xs">
+                    {generationCellLabel(p)}
+                  </td>
                   <td className="px-3 py-2">
-                    {p.sourceDriveFileUrl ? (
+                    {p.productDriveFolderUrl ? (
+                      <a
+                        className="text-xs text-primary underline"
+                        href={p.productDriveFolderUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Pasta
+                      </a>
+                    ) : p.sourceDriveFileUrl ? (
                       <a
                         className="text-xs text-primary underline"
                         href={p.sourceDriveFileUrl}
@@ -335,7 +403,7 @@ export default function CatalogPage() {
               ))}
               {productsQuery.data && productsQuery.data.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     Nenhuma sugestão neste filtro. Gere sugestões acima.
                   </td>
                 </tr>
@@ -346,6 +414,30 @@ export default function CatalogPage() {
       </Card>
     </div>
   );
+}
+
+type GenInfo = {
+  status: string;
+  imageUrl1: string | null;
+  imageUrl2: string | null;
+  imageUrl3: string | null;
+  genStartedAt?: Date | string | null;
+  genCompletedAt?: Date | string | null;
+  genStep?: number | null;
+  genError?: string | null;
+  genQueuedAt?: Date | string | null;
+};
+
+function generationCellLabel(p: GenInfo): React.ReactNode {
+  if (p.genError && p.genCompletedAt) {
+    return <span className="text-destructive" title={p.genError}>❌ falha</span>;
+  }
+  if (p.imageUrl1 && p.imageUrl2 && p.imageUrl3) return <span>✅ 3/3</span>;
+  if (p.genStartedAt && !p.genCompletedAt) {
+    return <span>⚙️ {p.genStep ?? 0}/3</span>;
+  }
+  if (p.genQueuedAt) return <span>⏳ na fila</span>;
+  return <span className="text-muted-foreground">—</span>;
 }
 
 function statusVariant(

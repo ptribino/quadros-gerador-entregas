@@ -8,6 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runStartupMigrations } from "./startupMigrate";
+import { startCatalogWorker } from "./catalogWorker";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -31,6 +32,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   // Aplica migrations + seed antes de aceitar tráfego (idempotente, não fatal).
   await runStartupMigrations();
+
+  // Worker da fila de geração do catálogo (Passo 2)
+  startCatalogWorker();
 
   const app = express();
   const server = createServer(app);

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getGoogleTokens } from "../_core/oauth";
@@ -384,6 +384,12 @@ export const catalogRouter = router({
       // Colunas 1 e 2 ("Código do produto (ID)" e "Código da categoria
       // principal (ID)") são numéricas — deixadas em branco para criar
       // produtos novos (Tray gera os IDs); preencher só ao atualizar.
+      // URL pública do arquivo de "tamanhos / cores das molduras",
+      // usada como imageUrl4 fallback caso o produto não tenha sido gerado.
+      const sizeRefUrl = ENV.driveSizeReferenceFileId
+        ? `https://drive.google.com/uc?export=download&id=${ENV.driveSizeReferenceFileId}`
+        : "";
+
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Worksheet");
       ws.columns = [
@@ -430,10 +436,13 @@ export const catalogRouter = router({
           catId: "",       // preencher manualmente com ID da categoria criada na Tray
           nome: p.nome,
           html: p.descricaoHtml ?? "",
+          // imageUrl1 = lifestyle, 2 = profissional, 3 = mockup
+          // (preenchidos pelo worker quando o usuário roda "Gerar imagens")
           img1: p.imageUrl1 ?? "",
           img2: p.imageUrl2 ?? "",
           img3: p.imageUrl3 ?? "",
-          img4: p.imageUrl4 ?? "",
+          // 4ª imagem é fixa: referência de tamanhos/molduras
+          img4: p.imageUrl4 ?? sizeRefUrl,
           precoVenda: Number(p.precoVenda),
           peso: p.pesoGramas,
           estoque: p.estoque,
@@ -469,6 +478,88 @@ export const catalogRouter = router({
         rows: rows.length,
       };
     }),
+
+  /**
+   * Enfileira produtos aprovados para geração de imagens.
+   * O worker in-process (catalogWorker) consome a fila em background.
+   */
+  enqueueGeneration: protectedProcedure
+    .input(
+      z.object({
+        productIds: z.array(z.number().int().positive()).min(1).max(100),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await requireDb();
+      // Apenas produtos do próprio usuário, aprovados ou com erro/idle e
+      // que ainda não estejam em processamento.
+      await db
+        .update(products)
+        .set({
+          genQueuedAt: new Date(),
+          genStartedAt: null,
+          genCompletedAt: null,
+          genStep: null,
+          genError: null,
+          genAttempts: 0,
+        })
+        .where(
+          and(
+            eq(products.userId, ctx.user.id),
+            inArray(products.id, input.productIds),
+          ),
+        );
+      return { queued: input.productIds.length };
+    }),
+
+  /**
+   * Remove produtos da fila (se ainda não estão rodando).
+   */
+  cancelGeneration: protectedProcedure
+    .input(
+      z.object({
+        productIds: z.array(z.number().int().positive()).min(1).max(100),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await requireDb();
+      await db
+        .update(products)
+        .set({ genQueuedAt: null })
+        .where(
+          and(
+            eq(products.userId, ctx.user.id),
+            inArray(products.id, input.productIds),
+            isNull(products.genStartedAt),
+          ),
+        );
+      return { cancelled: input.productIds.length };
+    }),
+
+  /**
+   * Resumo da fila para a UI exibir progresso global.
+   */
+  generationStatus: protectedProcedure.query(async ({ ctx }) => {
+    const db = await requireDb();
+    const rows = await db
+      .select({
+        id: products.id,
+        status: products.status,
+        genQueuedAt: products.genQueuedAt,
+        genStartedAt: products.genStartedAt,
+        genCompletedAt: products.genCompletedAt,
+        genStep: products.genStep,
+        genError: products.genError,
+        genAttempts: products.genAttempts,
+      })
+      .from(products)
+      .where(eq(products.userId, ctx.user.id));
+    const queued = rows.filter((r) => r.genQueuedAt && !r.genStartedAt && !r.genCompletedAt).length;
+    const running = rows.filter((r) => r.genStartedAt && !r.genCompletedAt).length;
+    const done = rows.filter((r) => r.status === "generated" || (r.genCompletedAt && !r.genError)).length;
+    const errored = rows.filter((r) => r.genError && r.genCompletedAt).length;
+    return { queued, running, done, errored, total: rows.length };
+  }),
 
   /**
    * Lista categorias mapeadas (alimenta o select da UI de curadoria).
