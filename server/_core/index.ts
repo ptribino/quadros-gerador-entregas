@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { runStartupMigrations } from "./startupMigrate";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -28,6 +29,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  // Aplica migrations + seed antes de aceitar tráfego (idempotente, não fatal).
+  await runStartupMigrations();
+
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
