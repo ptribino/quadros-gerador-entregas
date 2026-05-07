@@ -375,60 +375,82 @@ export const catalogRouter = router({
         .where(and(...conditions))
         .orderBy(desc(products.aiPotencialVenda), desc(products.createdAt));
 
+      // Layout EXATO do template oficial de importação da Tray (30 colunas).
+      // Colunas 1 e 2 ("Código do produto (ID)" e "Código da categoria
+      // principal (ID)") são numéricas — deixadas em branco para criar
+      // produtos novos (Tray gera os IDs); preencher só ao atualizar.
       const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet("Produtos");
+      const ws = wb.addWorksheet("Worksheet");
       ws.columns = [
-        { header: "Referência (código fornecedor)", key: "sku", width: 30 },
-        { header: "Nome do produto", key: "nome", width: 50 },
-        { header: "Exibir produto ativo", key: "ativo", width: 14 },
-        { header: "Exibir na loja", key: "naLoja", width: 12 },
-        { header: "Categoria Principal", key: "catPrincipal", width: 22 },
-        { header: "Subcategoria", key: "subcategoria", width: 22 },
-        { header: "Subsubcategoria (nível 3)", key: "subsub", width: 22 },
-        { header: "HTML da descrição completa", key: "html", width: 80 },
-        { header: "Preço de venda em reais", key: "preco", width: 14 },
-        { header: "Estoque do produto", key: "estoque", width: 12 },
-        { header: "Marca", key: "marca", width: 16 },
-        { header: "Modelo", key: "modelo", width: 30 },
-        { header: "Código EAN/GTIN/UPC", key: "ean", width: 18 },
-        { header: "Tempo de garantia", key: "garantia", width: 14 },
-        { header: "Peso do produto (gramas)", key: "peso", width: 14 },
-        { header: "Altura (cm)", key: "altura", width: 10 },
-        { header: "Largura (cm)", key: "largura", width: 10 },
-        { header: "Comprimento (cm)", key: "comprimento", width: 14 },
-        { header: "URL da imagem Principal", key: "img1", width: 50 },
-        { header: "URL segunda imagem", key: "img2", width: 50 },
-        { header: "URL terceira imagem", key: "img3", width: 50 },
-        { header: "URL quarta imagem", key: "img4", width: 50 },
-        { header: "URL quinta imagem", key: "img5", width: 50 },
+        { header: "Código do produto (ID)", key: "id", width: 14 },                       // 1
+        { header: "Código da categoria principal (ID)", key: "catId", width: 18 },        // 2
+        { header: "Nome do produto", key: "nome", width: 60 },                            // 3
+        { header: "HTML da descrição completa", key: "html", width: 80 },                 // 4
+        { header: "Endereço da imagem principal do produto", key: "img1", width: 50 },    // 5
+        { header: "Endereço da imagem do produto 2", key: "img2", width: 50 },            // 6
+        { header: "Endereço da imagem do produto 3", key: "img3", width: 50 },            // 7
+        { header: "Endereço da imagem do produto 4", key: "img4", width: 50 },            // 8
+        { header: "Preço de venda em reais", key: "precoVenda", width: 16 },              // 9
+        { header: "Peso do produto (gramas)", key: "peso", width: 14 },                   // 10
+        { header: "Estoque do produto", key: "estoque", width: 12 },                      // 11
+        { header: "Estoque mínimo para aviso", key: "estoqueMin", width: 12 },            // 12
+        { header: "Exibir selo destaque na loja", key: "seloDestaque", width: 14 },       // 13
+        { header: "Exibir selo de lançamento", key: "seloLancamento", width: 14 },        // 14
+        { header: "Exibir selo adicional", key: "seloAdicional", width: 14 },             // 15
+        { header: "Marca", key: "marca", width: 16 },                                     // 16
+        { header: "Modelo", key: "modelo", width: 30 },                                   // 17
+        { header: "Referência (código fornecedor)", key: "sku", width: 60 },              // 18
+        { header: "Tempo de garantia", key: "garantia", width: 14 },                      // 19
+        { header: "Preço de custo em reais", key: "precoCusto", width: 16 },              // 20
+        { header: "Comprimento (cm)", key: "comprimento", width: 14 },                    // 21
+        { header: "Largura (cm)", key: "largura", width: 10 },                            // 22
+        { header: "Altura (cm)", key: "altura", width: 10 },                              // 23
+        { header: "SEO - Titulo do produto", key: "seoTitulo", width: 40 },               // 24
+        { header: "SEO - Descrição simplificada", key: "seoDesc", width: 50 },            // 25
+        { header: "SEO - Palavras chaves do produto", key: "seoKeywords", width: 40 },    // 26
+        { header: "SEO - Endereço do produto (URL)", key: "slug", width: 50 },            // 27
+        { header: "Nome da categoria - nível 1", key: "catN1", width: 22 },               // 28
+        { header: "Nome da categoria - nível 2", key: "catN2", width: 22 },               // 29
+        { header: "Exibir na loja", key: "naLoja", width: 12 },                           // 30
       ];
       ws.getRow(1).font = { bold: true };
 
       for (const { p, c } of rows) {
+        // SEO description = primeira frase do HTML (sem tags), max ~160 chars
+        const plainText = (p.descricaoHtml ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const seoDesc = plainText.slice(0, 160);
+
         ws.addRow({
-          sku: p.sku,
+          id: "",          // vazio = produto novo (Tray gera)
+          catId: "",       // preencher manualmente com ID da categoria criada na Tray
           nome: p.nome,
-          ativo: p.exibirAtivo ? "Sim" : "Não",
-          naLoja: p.exibirNaLoja ? "Sim" : "Não",
-          catPrincipal: c?.trayCategoriaPrincipal ?? "Quadros Decorativos",
-          subcategoria: c?.traySubcategoria ?? "",
-          subsub: c?.traySubsubcategoria ?? "",
           html: p.descricaoHtml ?? "",
-          preco: Number(p.precoVenda),
-          estoque: p.estoque,
-          marca: p.marca,
-          modelo: p.modelo ?? p.sku,
-          ean: p.ean ?? "",
-          garantia: p.tempoGarantia,
-          peso: p.pesoGramas,
-          altura: Number(p.alturaCm),
-          largura: Number(p.larguraCm),
-          comprimento: Number(p.comprimentoCm),
           img1: p.imageUrl1 ?? "",
           img2: p.imageUrl2 ?? "",
           img3: p.imageUrl3 ?? "",
           img4: p.imageUrl4 ?? "",
-          img5: p.imageUrl5 ?? "",
+          precoVenda: Number(p.precoVenda),
+          peso: p.pesoGramas,
+          estoque: p.estoque,
+          estoqueMin: 5,
+          seloDestaque: 0,
+          seloLancamento: 0,
+          seloAdicional: 0,
+          marca: p.marca,
+          modelo: p.modelo ?? p.sku,
+          sku: p.sku,
+          garantia: p.tempoGarantia,
+          precoCusto: Number(p.precoCusto),
+          comprimento: Number(p.comprimentoCm),
+          largura: Number(p.larguraCm),
+          altura: Number(p.alturaCm),
+          seoTitulo: p.nome,
+          seoDesc,
+          seoKeywords: p.aiPalavrasChave ?? "",
+          slug: p.slugSeo ?? "",
+          catN1: c?.trayCategoriaPrincipal ?? "Quadros Decorativos",
+          catN2: c?.traySubcategoria ?? "",
+          naLoja: p.exibirNaLoja ? "Sim" : "Não",
         });
       }
 
