@@ -61,10 +61,12 @@ export async function runStartupMigrations() {
     return;
   }
 
-  let connection: mysql.Connection | null = null;
+  let pool: mysql.Pool | null = null;
   try {
-    connection = await mysql.createConnection(url);
-    const db = drizzle(connection);
+    // createPool aceita o formato de URL que drizzle usa internamente
+    // (createConnection é mais restrito quanto ao formato da URL).
+    pool = mysql.createPool(url);
+    const db = drizzle(pool);
 
     console.log("[startupMigrate] Aplicando migrations de", migrationsFolder);
     try {
@@ -103,11 +105,13 @@ export async function runStartupMigrations() {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error && err.stack ? err.stack : "";
+    const dump = JSON.stringify(err, Object.getOwnPropertyNames(err ?? {}));
     console.error("[startupMigrate] Falha (não fatal — servidor continua)");
-    console.error("[startupMigrate] erro:", msg);
+    console.error("[startupMigrate] erro:", msg || "(sem mensagem)");
+    console.error("[startupMigrate] dump:", dump);
     if (stack) console.error("[startupMigrate] stack:", stack);
   } finally {
-    if (connection) await connection.end().catch(() => {});
+    if (pool) await pool.end().catch(() => {});
   }
 }
 
