@@ -64,14 +64,21 @@ export default function CatalogPage() {
     onError: (err) => toast.error(err.message),
   });
 
+  const downloadFromMutation = (res: { fileName: string; mimeType: string; base64: string; rows: number }) => {
+    const link = document.createElement("a");
+    link.href = `data:${res.mimeType};base64,${res.base64}`;
+    link.download = res.fileName;
+    link.click();
+    toast.success(`Planilha gerada com ${res.rows} produtos`);
+  };
+
   const exportMutation = trpc.catalog.exportSuggestions.useMutation({
-    onSuccess: (res) => {
-      const link = document.createElement("a");
-      link.href = `data:${res.mimeType};base64,${res.base64}`;
-      link.download = res.fileName;
-      link.click();
-      toast.success(`Planilha gerada com ${res.rows} produtos`);
-    },
+    onSuccess: downloadFromMutation,
+    onError: (err) => toast.error(err.message),
+  });
+
+  const exportTrayMutation = trpc.catalog.exportTrayImport.useMutation({
+    onSuccess: downloadFromMutation,
     onError: (err) => toast.error(err.message),
   });
 
@@ -249,7 +256,7 @@ export default function CatalogPage() {
             </Button>
             <Button
               size="sm"
-              variant="default"
+              variant="outline"
               disabled={exportMutation.isPending}
               onClick={() =>
                 exportMutation.mutate({
@@ -257,8 +264,23 @@ export default function CatalogPage() {
                   productIds: selectedIds.size > 0 ? Array.from(selectedIds) : undefined,
                 })
               }
+              title="Planilha interna com metadados da curadoria (descricaoHtml, potencial, palavras-chave)"
             >
-              {exportMutation.isPending ? "Exportando..." : "Exportar XLSX"}
+              {exportMutation.isPending ? "..." : "Exportar curadoria"}
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              disabled={exportTrayMutation.isPending}
+              onClick={() =>
+                exportTrayMutation.mutate({
+                  status: statusFilter === "all" ? undefined : (statusFilter as any),
+                  productIds: selectedIds.size > 0 ? Array.from(selectedIds) : undefined,
+                })
+              }
+              title="Planilha pronta para importar na Tray (formato Modelo_Produtos)"
+            >
+              {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
             </Button>
           </div>
         </CardHeader>

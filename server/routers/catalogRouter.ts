@@ -346,6 +346,104 @@ export const catalogRouter = router({
     }),
 
   /**
+   * Exporta planilha NO FORMATO DE IMPORTAÇÃO DA TRAY
+   * (mesmo layout do Modelo_Produtos_Preenchido.xlsx — 23 colunas).
+   * Os campos de URL de imagem ficam vazios se ainda não foram processados.
+   */
+  exportTrayImport: protectedProcedure
+    .input(
+      z.object({
+        productIds: z.array(z.number().int().positive()).optional(),
+        status: z.enum(productStatusEnum).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await requireDb();
+      const conditions = [eq(products.userId, ctx.user.id)];
+      if (input.status) conditions.push(eq(products.status, input.status));
+      if (input.productIds && input.productIds.length > 0) {
+        conditions.push(inArray(products.id, input.productIds));
+      }
+
+      const rows = await db
+        .select({
+          p: products,
+          c: categoryCodes,
+        })
+        .from(products)
+        .leftJoin(categoryCodes, eq(products.categoryCodeId, categoryCodes.id))
+        .where(and(...conditions))
+        .orderBy(desc(products.aiPotencialVenda), desc(products.createdAt));
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Produtos");
+      ws.columns = [
+        { header: "Referência (código fornecedor)", key: "sku", width: 30 },
+        { header: "Nome do produto", key: "nome", width: 50 },
+        { header: "Exibir produto ativo", key: "ativo", width: 14 },
+        { header: "Exibir na loja", key: "naLoja", width: 12 },
+        { header: "Categoria Principal", key: "catPrincipal", width: 22 },
+        { header: "Subcategoria", key: "subcategoria", width: 22 },
+        { header: "Subsubcategoria (nível 3)", key: "subsub", width: 22 },
+        { header: "HTML da descrição completa", key: "html", width: 80 },
+        { header: "Preço de venda em reais", key: "preco", width: 14 },
+        { header: "Estoque do produto", key: "estoque", width: 12 },
+        { header: "Marca", key: "marca", width: 16 },
+        { header: "Modelo", key: "modelo", width: 30 },
+        { header: "Código EAN/GTIN/UPC", key: "ean", width: 18 },
+        { header: "Tempo de garantia", key: "garantia", width: 14 },
+        { header: "Peso do produto (gramas)", key: "peso", width: 14 },
+        { header: "Altura (cm)", key: "altura", width: 10 },
+        { header: "Largura (cm)", key: "largura", width: 10 },
+        { header: "Comprimento (cm)", key: "comprimento", width: 14 },
+        { header: "URL da imagem Principal", key: "img1", width: 50 },
+        { header: "URL segunda imagem", key: "img2", width: 50 },
+        { header: "URL terceira imagem", key: "img3", width: 50 },
+        { header: "URL quarta imagem", key: "img4", width: 50 },
+        { header: "URL quinta imagem", key: "img5", width: 50 },
+      ];
+      ws.getRow(1).font = { bold: true };
+
+      for (const { p, c } of rows) {
+        ws.addRow({
+          sku: p.sku,
+          nome: p.nome,
+          ativo: p.exibirAtivo ? "Sim" : "Não",
+          naLoja: p.exibirNaLoja ? "Sim" : "Não",
+          catPrincipal: c?.trayCategoriaPrincipal ?? "Quadros Decorativos",
+          subcategoria: c?.traySubcategoria ?? "",
+          subsub: c?.traySubsubcategoria ?? "",
+          html: p.descricaoHtml ?? "",
+          preco: Number(p.precoVenda),
+          estoque: p.estoque,
+          marca: p.marca,
+          modelo: p.modelo ?? p.sku,
+          ean: p.ean ?? "",
+          garantia: p.tempoGarantia,
+          peso: p.pesoGramas,
+          altura: Number(p.alturaCm),
+          largura: Number(p.larguraCm),
+          comprimento: Number(p.comprimentoCm),
+          img1: p.imageUrl1 ?? "",
+          img2: p.imageUrl2 ?? "",
+          img3: p.imageUrl3 ?? "",
+          img4: p.imageUrl4 ?? "",
+          img5: p.imageUrl5 ?? "",
+        });
+      }
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const base64 = Buffer.from(buffer).toString("base64");
+      const fileName = `Tray_Import_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      return {
+        fileName,
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        base64,
+        rows: rows.length,
+      };
+    }),
+
+  /**
    * Lista categorias mapeadas (alimenta o select da UI de curadoria).
    */
   listCategories: protectedProcedure.query(async () => {
