@@ -375,61 +375,82 @@ export const catalogRouter = router({
         .where(and(...conditions))
         .orderBy(desc(products.aiPotencialVenda), desc(products.createdAt));
 
-      // Layout EXATO de Catalogo_Quadros_Tray_COM_IMAGENS.xlsx — 25 colunas.
-      // A Tray faz match por POSIÇÃO de coluna, não por nome do header,
-      // então as colunas "Não importar" precisam existir mesmo vazias para
-      // que os campos seguintes caiam na posição esperada.
+      // Layout EXATO do template oficial de importação da Tray (30 colunas).
+      // Colunas 1 e 2 ("Código do produto (ID)" e "Código da categoria
+      // principal (ID)") são numéricas — deixadas em branco para criar
+      // produtos novos (Tray gera os IDs); preencher só ao atualizar.
       const wb = new ExcelJS.Workbook();
-      const ws = wb.addWorksheet("Catálogo - Tray");
+      const ws = wb.addWorksheet("Worksheet");
       ws.columns = [
-        { header: "Referência (código fornecedor)", key: "sku", width: 60 },         // 1
-        { header: "Não importar os dados da coluna", key: "skip1", width: 4 },       // 2
-        { header: "Não importar os dados da coluna", key: "skip2", width: 4 },       // 3
-        { header: "Código do produto (ID)", key: "id", width: 14 },                  // 4 (numérico)
-        { header: "Nome do produto", key: "nome", width: 60 },                       // 5
-        { header: "Não importar os dados da coluna", key: "skip3", width: 4 },       // 6
-        { header: "Preço de venda em reais", key: "precoVenda", width: 16 },         // 7
-        { header: "Não importar os dados da coluna", key: "skip4", width: 4 },       // 8
-        { header: "Preço de custo em reais", key: "precoCusto", width: 16 },         // 9
-        { header: "Estoque do produto", key: "estoque", width: 12 },                 // 10
-        { header: "Exibir produto ativo", key: "ativo", width: 14 },                 // 11
-        { header: "Não importar os dados da coluna", key: "skip5", width: 4 },       // 12
-        { header: "Não importar os dados da coluna", key: "skip6", width: 4 },       // 13
-        { header: "Não importar os dados da coluna", key: "skip7", width: 4 },       // 14
-        { header: "NCM do produto", key: "ncm", width: 14 },                         // 15
-        { header: "Código EAN/GTIN/UPC", key: "ean", width: 18 },                    // 16
-        { header: "Prazo de disponibilidade", key: "prazo", width: 14 },             // 17
-        { header: "SEO - Endereço do produto (URL)", key: "slug", width: 50 },       // 18
-        { header: "Peso do produto (gramas)", key: "peso", width: 14 },              // 19
-        { header: "Largura (cm)", key: "largura", width: 10 },                       // 20
-        { header: "Altura (cm)", key: "altura", width: 10 },                         // 21
-        { header: "Comprimento (cm)", key: "comprimento", width: 14 },               // 22
-        { header: "Imagem_Mapeada", key: "imagemMapeada", width: 50 },               // 23 (custom)
-        { header: "Pasta_Drive", key: "pastaDrive", width: 60 },                     // 24 (custom)
-        { header: "Status_Imagem", key: "statusImagem", width: 16 },                 // 25 (custom)
+        { header: "Código do produto (ID)", key: "id", width: 14 },                       // 1
+        { header: "Código da categoria principal (ID)", key: "catId", width: 18 },        // 2
+        { header: "Nome do produto", key: "nome", width: 60 },                            // 3
+        { header: "HTML da descrição completa", key: "html", width: 80 },                 // 4
+        { header: "Endereço da imagem principal do produto", key: "img1", width: 50 },    // 5
+        { header: "Endereço da imagem do produto 2", key: "img2", width: 50 },            // 6
+        { header: "Endereço da imagem do produto 3", key: "img3", width: 50 },            // 7
+        { header: "Endereço da imagem do produto 4", key: "img4", width: 50 },            // 8
+        { header: "Preço de venda em reais", key: "precoVenda", width: 16 },              // 9
+        { header: "Peso do produto (gramas)", key: "peso", width: 14 },                   // 10
+        { header: "Estoque do produto", key: "estoque", width: 12 },                      // 11
+        { header: "Estoque mínimo para aviso", key: "estoqueMin", width: 12 },            // 12
+        { header: "Exibir selo destaque na loja", key: "seloDestaque", width: 14 },       // 13
+        { header: "Exibir selo de lançamento", key: "seloLancamento", width: 14 },        // 14
+        { header: "Exibir selo adicional", key: "seloAdicional", width: 14 },             // 15
+        { header: "Marca", key: "marca", width: 16 },                                     // 16
+        { header: "Modelo", key: "modelo", width: 30 },                                   // 17
+        { header: "Referência (código fornecedor)", key: "sku", width: 60 },              // 18
+        { header: "Tempo de garantia", key: "garantia", width: 14 },                      // 19
+        { header: "Preço de custo em reais", key: "precoCusto", width: 16 },              // 20
+        { header: "Comprimento (cm)", key: "comprimento", width: 14 },                    // 21
+        { header: "Largura (cm)", key: "largura", width: 10 },                            // 22
+        { header: "Altura (cm)", key: "altura", width: 10 },                              // 23
+        { header: "SEO - Titulo do produto", key: "seoTitulo", width: 40 },               // 24
+        { header: "SEO - Descrição simplificada", key: "seoDesc", width: 50 },            // 25
+        { header: "SEO - Palavras chaves do produto", key: "seoKeywords", width: 40 },    // 26
+        { header: "SEO - Endereço do produto (URL)", key: "slug", width: 50 },            // 27
+        { header: "Nome da categoria - nível 1", key: "catN1", width: 22 },               // 28
+        { header: "Nome da categoria - nível 2", key: "catN2", width: 22 },               // 29
+        { header: "Exibir na loja", key: "naLoja", width: 12 },                           // 30
       ];
       ws.getRow(1).font = { bold: true };
 
-      for (const { p } of rows) {
+      for (const { p, c } of rows) {
+        // SEO description = primeira frase do HTML (sem tags), max ~160 chars
+        const plainText = (p.descricaoHtml ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const seoDesc = plainText.slice(0, 160);
+
         ws.addRow({
-          sku: p.sku,
-          id: 1000 + p.id, // numérico — exigido pela validação da Tray na posição 4
+          id: "",          // vazio = produto novo (Tray gera)
+          catId: "",       // preencher manualmente com ID da categoria criada na Tray
           nome: p.nome,
+          html: p.descricaoHtml ?? "",
+          img1: p.imageUrl1 ?? "",
+          img2: p.imageUrl2 ?? "",
+          img3: p.imageUrl3 ?? "",
+          img4: p.imageUrl4 ?? "",
           precoVenda: Number(p.precoVenda),
-          precoCusto: Number(p.precoCusto),
-          estoque: p.estoque,
-          ativo: p.exibirAtivo ? 1 : 0,
-          ncm: p.ncm,
-          ean: p.ean ?? "",
-          prazo: p.prazoDisponibilidade,
-          slug: p.slugSeo ?? "",
           peso: p.pesoGramas,
+          estoque: p.estoque,
+          estoqueMin: 5,
+          seloDestaque: 0,
+          seloLancamento: 0,
+          seloAdicional: 0,
+          marca: p.marca,
+          modelo: p.modelo ?? p.sku,
+          sku: p.sku,
+          garantia: p.tempoGarantia,
+          precoCusto: Number(p.precoCusto),
+          comprimento: Number(p.comprimentoCm),
           largura: Number(p.larguraCm),
           altura: Number(p.alturaCm),
-          comprimento: Number(p.comprimentoCm),
-          imagemMapeada: p.sourceDriveFileId ?? "",
-          pastaDrive: p.productDriveFolderUrl ?? p.sourceDriveFileUrl ?? "",
-          statusImagem: p.productDriveFolderId ? "✅ Mapeado" : "⏳ Pendente",
+          seoTitulo: p.nome,
+          seoDesc,
+          seoKeywords: p.aiPalavrasChave ?? "",
+          slug: p.slugSeo ?? "",
+          catN1: c?.trayCategoriaPrincipal ?? "Quadros Decorativos",
+          catN2: c?.traySubcategoria ?? "",
+          naLoja: p.exibirNaLoja ? "Sim" : "Não",
         });
       }
 
