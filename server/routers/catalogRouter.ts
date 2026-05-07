@@ -359,6 +359,11 @@ export const catalogRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const db = await requireDb();
+      console.log("[catalog.exportTrayImport] input:", {
+        status: input.status,
+        productIdsCount: input.productIds?.length ?? 0,
+        productIds: input.productIds,
+      });
       const conditions = [eq(products.userId, ctx.user.id)];
       if (input.status) conditions.push(eq(products.status, input.status));
       if (input.productIds && input.productIds.length > 0) {
