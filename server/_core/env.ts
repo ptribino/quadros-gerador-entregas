@@ -17,4 +17,8 @@ export const ENV = {
   driveBankFolderId: process.env.DRIVE_BANK_FOLDER_ID ?? "",
   // Pasta destino onde o pipeline cria as pastas [SKU] de cada produto
   driveDestinationFolderId: process.env.DRIVE_DESTINATION_FOLDER_ID ?? "",
+  // ID do arquivo "tamanho real / cores das molduras" no Drive (público).
+  // Quando setado, vira a 4ª imagem (imageUrl4) de TODOS os produtos no
+  // export Tray, sem precisar fazer upload por produto.
+  driveSizeReferenceFileId: process.env.DRIVE_SIZE_REFERENCE_FILE_ID ?? "",
 };

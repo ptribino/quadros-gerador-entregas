@@ -108,6 +108,7 @@ async function processOne(): Promise<boolean> {
         imageUrl1: result.imageUrls[0],
         imageUrl2: result.imageUrls[1],
         imageUrl3: result.imageUrls[2],
+        imageUrl4: result.imageUrls[3] ?? null, // referência de tamanhos (se config setada)
         genCompletedAt: new Date(),
         genStep: 3,
         status: "generated",

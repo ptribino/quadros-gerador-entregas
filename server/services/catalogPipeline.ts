@@ -9,6 +9,7 @@
  * Cada produto = 1 invocação de `runForProduct`. O worker chama esta
  * função em background uma vez por job da fila.
  */
+import sharp from "sharp";
 import { ENV } from "../_core/env";
 import { googleDriveService } from "./googleDriveService";
 import { googleImagenService } from "./freepikService";
@@ -50,6 +51,43 @@ const REGULAR_AMBIENTS: readonly AmbientType[] = ["scandinavian", "modern"];
  */
 function sanitizeFolderName(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, "").slice(0, 100).trim();
+}
+
+/**
+ * Garante que a imagem cabe nos requisitos do e-commerce:
+ *   - max 2500px na maior dimensão
+ *   - até 1MB de tamanho final (JPEG progressivo)
+ * Usa qualidade adaptativa: tenta 85, depois 75/65/55 se passou de 1MB.
+ */
+const MAX_DIMENSION = 2500;
+const MAX_FILE_BYTES = 1024 * 1024;
+
+async function fitForEcommerce(
+  buffer: Buffer,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  let pipeline = sharp(buffer).rotate().resize({
+    width: MAX_DIMENSION,
+    height: MAX_DIMENSION,
+    fit: "inside",
+    withoutEnlargement: true,
+  });
+
+  for (const quality of [85, 75, 65, 55, 45]) {
+    const out = await pipeline
+      .clone()
+      .jpeg({ quality, progressive: true, mozjpeg: true })
+      .toBuffer();
+    if (out.length <= MAX_FILE_BYTES) {
+      return { buffer: out, mimeType: "image/jpeg" };
+    }
+  }
+  // Última tentativa: força redução adicional de dimensão
+  const fallback = await sharp(buffer)
+    .rotate()
+    .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 60, progressive: true, mozjpeg: true })
+    .toBuffer();
+  return { buffer: fallback, mimeType: "image/jpeg" };
 }
 
 /**
@@ -114,7 +152,7 @@ export async function runForProduct(
   );
 
   // Subpastas
-  const [, lifestyleFolder, mockupFolder] = await Promise.all([
+  const [hdFolder, lifestyleFolder, mockupFolder] = await Promise.all([
     googleDriveService.getOrCreateFolder(accessToken, "01_HD_Original", productFolder.id),
     googleDriveService.getOrCreateFolder(accessToken, "02_Lifestyle", productFolder.id),
     googleDriveService.getOrCreateFolder(accessToken, "03_Mockups", productFolder.id),
@@ -125,12 +163,23 @@ export async function runForProduct(
   const originalMime = product.sourceDriveMimeType || "image/jpeg";
   const referenceDataUrl = `data:${originalMime};base64,${originalBuffer.toString("base64")}`;
 
+  // Salva o original SEM resize na pasta HD (uso interno: impressão / arquivo)
+  const origExt = originalMime.includes("png") ? "png" : "jpg";
+  await googleDriveService.uploadFile(
+    accessToken,
+    `${product.sku}-original.${origExt}`,
+    originalBuffer,
+    originalMime,
+    hdFolder.id,
+  );
+
   // Define a moldura uma vez — todas as 3 imagens usam a mesma
   const frame: FrameType = pickRandom(FRAMES);
   const lifestyleAmbient: AmbientType = pickRandom(REGULAR_AMBIENTS);
 
-  // ETAPA 2 — Lifestyle (ambiente regular)
-  const life = await generateOne("lifestyle", frame, lifestyleAmbient, referenceDataUrl);
+  // ETAPA 2 — Lifestyle (ambiente regular). Resize/compress antes do upload.
+  const lifeRaw = await generateOne("lifestyle", frame, lifestyleAmbient, referenceDataUrl);
+  const life = await fitForEcommerce(lifeRaw.buffer);
   const lifeFile = await googleDriveService.uploadFile(
     accessToken,
     `${product.sku}-lifestyle-${frame}-${lifestyleAmbient}.jpg`,
@@ -142,7 +191,8 @@ export async function runForProduct(
   await onProgress?.(1, `lifestyle ${frame}/${lifestyleAmbient}`);
 
   // ETAPA 3 — Lifestyle profissional (ambiente "corporate")
-  const pro = await generateOne("lifestyle", frame, "corporate", referenceDataUrl);
+  const proRaw = await generateOne("lifestyle", frame, "corporate", referenceDataUrl);
+  const pro = await fitForEcommerce(proRaw.buffer);
   const proFile = await googleDriveService.uploadFile(
     accessToken,
     `${product.sku}-lifestyle-${frame}-corporate.jpg`,
@@ -154,7 +204,8 @@ export async function runForProduct(
   await onProgress?.(2, `lifestyle ${frame}/corporate`);
 
   // ETAPA 4 — Mockup
-  const mock = await generateOne("mockup", frame, undefined, referenceDataUrl);
+  const mockRaw = await generateOne("mockup", frame, undefined, referenceDataUrl);
+  const mock = await fitForEcommerce(mockRaw.buffer);
   const mockFile = await googleDriveService.uploadFile(
     accessToken,
     `${product.sku}-mockup-${frame}.jpg`,
@@ -165,13 +216,20 @@ export async function runForProduct(
   await googleDriveService.makePublic(accessToken, mockFile.id);
   await onProgress?.(3, `mockup ${frame}`);
 
+  // imageUrls[0..2] = lifestyle, profissional, mockup
+  // imageUrls[3]    = referência de tamanhos (mesma para todos os produtos)
+  const imageUrls = [
+    googleDriveService.publicDownloadUrl(lifeFile.id),
+    googleDriveService.publicDownloadUrl(proFile.id),
+    googleDriveService.publicDownloadUrl(mockFile.id),
+  ];
+  if (ENV.driveSizeReferenceFileId) {
+    imageUrls.push(googleDriveService.publicDownloadUrl(ENV.driveSizeReferenceFileId));
+  }
+
   return {
     productFolderId: productFolder.id,
     productFolderUrl: productFolder.webViewLink,
-    imageUrls: [
-      googleDriveService.publicDownloadUrl(lifeFile.id),
-      googleDriveService.publicDownloadUrl(proFile.id),
-      googleDriveService.publicDownloadUrl(mockFile.id),
-    ],
+    imageUrls,
   };
 }

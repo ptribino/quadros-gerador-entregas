@@ -360,6 +360,7 @@ export default function CatalogPage() {
                     <Checkbox
                       checked={selectedIds.has(p.id)}
                       onCheckedChange={() => toggleSelect(p.id)}
+                      className="size-5 border-2 border-foreground/40 data-[state=checked]:border-primary"
                     />
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">{p.sku}</td>

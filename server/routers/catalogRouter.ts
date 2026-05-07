@@ -384,6 +384,12 @@ export const catalogRouter = router({
       // Colunas 1 e 2 ("Código do produto (ID)" e "Código da categoria
       // principal (ID)") são numéricas — deixadas em branco para criar
       // produtos novos (Tray gera os IDs); preencher só ao atualizar.
+      // URL pública do arquivo de "tamanhos / cores das molduras",
+      // usada como imageUrl4 fallback caso o produto não tenha sido gerado.
+      const sizeRefUrl = ENV.driveSizeReferenceFileId
+        ? `https://drive.google.com/uc?export=download&id=${ENV.driveSizeReferenceFileId}`
+        : "";
+
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Worksheet");
       ws.columns = [
@@ -435,7 +441,8 @@ export const catalogRouter = router({
           img1: p.imageUrl1 ?? "",
           img2: p.imageUrl2 ?? "",
           img3: p.imageUrl3 ?? "",
-          img4: p.imageUrl4 ?? "",
+          // 4ª imagem é fixa: referência de tamanhos/molduras
+          img4: p.imageUrl4 ?? sizeRefUrl,
           precoVenda: Number(p.precoVenda),
           peso: p.pesoGramas,
           estoque: p.estoque,
