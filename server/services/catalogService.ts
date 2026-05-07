@@ -8,7 +8,7 @@
  * Tudo aqui é puro: não toca DB nem Drive (isso é responsabilidade do router).
  */
 import slugify from "slugify";
-import { invokeLLM } from "../_core/llm";
+import { ENV } from "../_core/env";
 
 // ---------- SKU + slug ----------
 
@@ -48,42 +48,17 @@ export type AiSuggestion = {
   publicoAlvo: string;
 };
 
-const SUGGESTION_SCHEMA = {
-  name: "ProductSuggestion",
-  strict: true,
-  schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      nome: {
-        type: "string",
-        description:
-          "Nome comercial curto (4-8 palavras). Começa com 'Quadro Decorativo' quando fizer sentido.",
-      },
-      descricaoHtml: {
-        type: "string",
-        description:
-          "Descrição em HTML estruturado conforme o template fornecido (h2, p, h3, ul). Sem ```html, sem markdown.",
-      },
-      potencialVenda: {
-        type: "integer",
-        minimum: 1,
-        maximum: 10,
-        description: "Quão bem essa arte tende a vender em e-commerce de quadros decorativos.",
-      },
-      palavrasChave: {
-        type: "array",
-        items: { type: "string" },
-        minItems: 3,
-        maxItems: 8,
-      },
-      publicoAlvo: {
-        type: "string",
-        description: "Frase curta descrevendo quem compraria (ex: 'mulheres 25-40 com estética minimalista').",
-      },
-    },
-    required: ["nome", "descricaoHtml", "potencialVenda", "palavrasChave", "publicoAlvo"],
+// Schema usado pelo Gemini via responseSchema (não suporta `additionalProperties`).
+const RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    nome: { type: "string" },
+    descricaoHtml: { type: "string" },
+    potencialVenda: { type: "integer" },
+    palavrasChave: { type: "array", items: { type: "string" } },
+    publicoAlvo: { type: "string" },
   },
+  required: ["nome", "descricaoHtml", "potencialVenda", "palavrasChave", "publicoAlvo"],
 } as const;
 
 const PROMPT_SISTEMA = `Você é um especialista em SEO e curadoria para e-commerce de quadros decorativos da marca Qtok Quadros.
@@ -121,46 +96,73 @@ TEMPLATE DE DESCRIÇÃO (preencha apenas o que está entre {{}}):
 
 Retorne APENAS o JSON conforme o schema fornecido.`;
 
+function extractInlineData(dataUrl: string): { mimeType: string; data: string } {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) throw new Error("imageDataUrl inválido: precisa ser data:<mime>;base64,<...>");
+  return { mimeType: match[1], data: match[2] };
+}
+
 /**
  * Analisa uma imagem do banco e devolve metadados estruturados para cadastro.
- * `imageDataUrl` deve ser um data URL (data:image/jpeg;base64,...) — é o
- * formato que `googleDriveService.getFileContent` já produz.
+ * Chama a Gemini API diretamente (generativelanguage.googleapis.com) usando
+ * GOOGLE_API_KEY — a mesma chave usada pelo gerador de imagens existente.
  */
 export async function analyzeImageForCatalog(args: {
   imageDataUrl: string;
   categoria: string;
   fileName: string;
 }): Promise<AiSuggestion> {
-  const result = await invokeLLM({
-    messages: [
-      { role: "system", content: PROMPT_SISTEMA },
+  if (!ENV.googleApiKey) {
+    throw new Error("GOOGLE_API_KEY não configurada");
+  }
+
+  const { mimeType, data } = extractInlineData(args.imageDataUrl);
+  const model = "gemini-2.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${ENV.googleApiKey}`;
+
+  const userText = `Categoria do banco: "${args.categoria}". Arquivo de origem: "${args.fileName}". Analise a imagem e gere os metadados conforme as instruções.`;
+
+  const payload = {
+    systemInstruction: { parts: [{ text: PROMPT_SISTEMA }] },
+    contents: [
       {
         role: "user",
-        content: [
-          {
-            type: "text",
-            text: `Categoria do banco: "${args.categoria}". Arquivo de origem: "${args.fileName}". Analise a imagem e gere os metadados.`,
-          },
-          { type: "image_url", image_url: { url: args.imageDataUrl, detail: "high" } },
-        ],
+        parts: [{ inlineData: { mimeType, data } }, { text: userText }],
       },
     ],
-    outputSchema: SUGGESTION_SCHEMA,
-    maxTokens: 4096,
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: RESPONSE_SCHEMA,
+      temperature: 0.7,
+      maxOutputTokens: 2048,
+    },
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 
-  const raw = result.choices?.[0]?.message?.content;
-  const text = typeof raw === "string" ? raw : Array.isArray(raw) ? raw.find((p) => p.type === "text")?.text ?? "" : "";
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API erro ${response.status}: ${errText.slice(0, 300)}`);
+  }
 
+  const result = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+
+  const text = result.candidates?.[0]?.content?.parts?.find((p) => p.text)?.text ?? "";
   if (!text) {
-    throw new Error("Gemini não retornou conteúdo textual na análise da imagem.");
+    throw new Error("Gemini não retornou texto na análise da imagem.");
   }
 
   let parsed: AiSuggestion;
   try {
     parsed = JSON.parse(text);
-  } catch (err) {
-    throw new Error(`Resposta da IA não é JSON válido: ${text.slice(0, 200)}`);
+  } catch {
+    throw new Error(`Resposta Gemini não é JSON válido: ${text.slice(0, 200)}`);
   }
 
   if (!parsed.nome || !parsed.descricaoHtml) {
