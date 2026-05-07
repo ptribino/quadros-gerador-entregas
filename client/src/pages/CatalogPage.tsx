@@ -259,10 +259,11 @@ export default function CatalogPage() {
               variant="outline"
               disabled={exportMutation.isPending}
               onClick={() =>
-                exportMutation.mutate({
-                  status: statusFilter === "all" ? undefined : (statusFilter as any),
-                  productIds: selectedIds.size > 0 ? Array.from(selectedIds) : undefined,
-                })
+                exportMutation.mutate(
+                  selectedIds.size > 0
+                    ? { productIds: Array.from(selectedIds) }
+                    : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
+                )
               }
               title="Planilha interna com metadados da curadoria (descricaoHtml, potencial, palavras-chave)"
             >
@@ -273,12 +274,13 @@ export default function CatalogPage() {
               variant="default"
               disabled={exportTrayMutation.isPending}
               onClick={() =>
-                exportTrayMutation.mutate({
-                  status: statusFilter === "all" ? undefined : (statusFilter as any),
-                  productIds: selectedIds.size > 0 ? Array.from(selectedIds) : undefined,
-                })
+                exportTrayMutation.mutate(
+                  selectedIds.size > 0
+                    ? { productIds: Array.from(selectedIds) }
+                    : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
+                )
               }
-              title="Planilha pronta para importar na Tray (formato Modelo_Produtos)"
+              title="Planilha pronta para importar na Tray (formato 30 colunas)"
             >
               {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
             </Button>
