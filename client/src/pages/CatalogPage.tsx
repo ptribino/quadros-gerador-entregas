@@ -319,8 +319,8 @@ export default function CatalogPage() {
 
       <Card>
         <CardHeader className="space-y-2 pb-3">
-          <div className="flex flex-row items-center justify-between space-y-0">
-            <div>
+          <div className="flex flex-row items-center justify-between gap-3 space-y-0">
+            <div className="min-w-0">
               <CardTitle className="text-base">Sugestões</CardTitle>
               <p className="text-xs text-muted-foreground">
                 {visibleProducts.length} produtos
@@ -330,41 +330,44 @@ export default function CatalogPage() {
                 · {selectedIds.size} selecionado(s)
               </p>
             </div>
-            <div className="flex items-center gap-2">
-            <Input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por SKU, nome, marca..."
-              className="w-56"
-            />
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="suggested">Sugeridos</SelectItem>
-                <SelectItem value="approved">Aprovados</SelectItem>
-                <SelectItem value="generating">Gerando</SelectItem>
-                <SelectItem value="generated">Gerados</SelectItem>
-                <SelectItem value="exported">Exportados</SelectItem>
-                <SelectItem value="rejected">Rejeitados</SelectItem>
-                <SelectItem value="error">Com erro</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={genFilter} onValueChange={(v) => setGenFilter(v as GenFilter)}>
-              <SelectTrigger className="w-44" title="Filtrar por status de geração de imagens">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Geração: todos</SelectItem>
-                <SelectItem value="generated">✅ pronto</SelectItem>
-                <SelectItem value="in_progress">⚙️ gerando</SelectItem>
-                <SelectItem value="queued">⏳ na fila</SelectItem>
-                <SelectItem value="failed">❌ falha</SelectItem>
-                <SelectItem value="none">Não gerado</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por SKU, nome, marca..."
+                className="w-56"
+              />
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="suggested">Sugeridos</SelectItem>
+                  <SelectItem value="approved">Aprovados</SelectItem>
+                  <SelectItem value="generating">Gerando</SelectItem>
+                  <SelectItem value="generated">Gerados</SelectItem>
+                  <SelectItem value="exported">Exportados</SelectItem>
+                  <SelectItem value="rejected">Rejeitados</SelectItem>
+                  <SelectItem value="error">Com erro</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={genFilter} onValueChange={(v) => setGenFilter(v as GenFilter)}>
+                <SelectTrigger className="w-44" title="Filtrar por status de geração de imagens">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Geração: todos</SelectItem>
+                  <SelectItem value="generated">✅ pronto</SelectItem>
+                  <SelectItem value="in_progress">⚙️ gerando</SelectItem>
+                  <SelectItem value="queued">⏳ na fila</SelectItem>
+                  <SelectItem value="failed">❌ falha</SelectItem>
+                  <SelectItem value="none">Não gerado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={selectAll}>
               Selecionar todos
             </Button>
@@ -407,37 +410,38 @@ export default function CatalogPage() {
             >
               {enqueueMutation.isPending ? "..." : "Gerar imagens"}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={exportMutation.isPending}
-              onClick={() =>
-                exportMutation.mutate(
-                  selectedIds.size > 0
-                    ? { productIds: Array.from(selectedIds) }
-                    : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
-                )
-              }
-              title="Planilha interna com metadados da curadoria (descricaoHtml, potencial, palavras-chave)"
-            >
-              {exportMutation.isPending ? "..." : "Exportar curadoria"}
-            </Button>
-            <Button
-              size="sm"
-              variant="default"
-              disabled={exportTrayMutation.isPending}
-              onClick={() =>
-                exportTrayMutation.mutate(
-                  selectedIds.size > 0
-                    ? { productIds: Array.from(selectedIds) }
-                    : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
-                )
-              }
-              title="Planilha pronta para importar na Tray (formato 30 colunas)"
-            >
-              {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
-            </Button>
-          </div>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={exportMutation.isPending}
+                onClick={() =>
+                  exportMutation.mutate(
+                    selectedIds.size > 0
+                      ? { productIds: Array.from(selectedIds) }
+                      : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
+                  )
+                }
+                title="Planilha interna com metadados da curadoria (descricaoHtml, potencial, palavras-chave)"
+              >
+                {exportMutation.isPending ? "..." : "Exportar curadoria"}
+              </Button>
+              <Button
+                size="sm"
+                variant="default"
+                disabled={exportTrayMutation.isPending}
+                onClick={() =>
+                  exportTrayMutation.mutate(
+                    selectedIds.size > 0
+                      ? { productIds: Array.from(selectedIds) }
+                      : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
+                  )
+                }
+                title="Planilha pronta para importar na Tray (formato 30 colunas)"
+              >
+                {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
+              </Button>
+            </div>
           </div>
           <div className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900 ring-1 ring-blue-100">
             <span className="font-medium">Como funciona:</span>{" "}
