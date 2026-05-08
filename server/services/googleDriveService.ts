@@ -1,5 +1,24 @@
 import { ENV } from '../_core/env';
 
+/**
+ * Extrai o ID puro de um arquivo do Drive a partir de qualquer formato
+ * comum (URL completa, "d/<id>", ou só o ID). Defensivo contra
+ * copy/paste que inclui o `d/` sem querer.
+ */
+function extractDriveFileId(input: string): string {
+  if (!input) return input;
+  const trimmed = input.trim();
+  // URL completa: https://drive.google.com/file/d/<ID>/view  ou  uc?...&id=<ID>
+  const fromUrlD = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (fromUrlD) return fromUrlD[1];
+  const fromUrlId = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if (fromUrlId) return fromUrlId[1];
+  // Path tipo "d/<ID>"
+  if (trimmed.startsWith("d/")) return trimmed.slice(2).split(/[/?]/, 1)[0]!;
+  // Já é só o ID
+  return trimmed;
+}
+
 interface GoogleDriveFile {
   id: string;
   name: string;
@@ -262,9 +281,15 @@ class GoogleDriveService {
    * direta — desde que o arquivo seja público (`makePublic`).
    * `view`-style URLs retornam HTML preview, então a Tray falha; daí o
    * formato `uc?export=download` ser obrigatório.
+   *
+   * Aceita qualquer um destes formatos pra `fileId` (sanitiza p/ só o ID):
+   *   - "1abc...XYZ"                                                (ID puro)
+   *   - "d/1abc...XYZ"                                              (path comum no copy/paste)
+   *   - "https://drive.google.com/file/d/1abc...XYZ/view"           (URL completa)
+   *   - "https://drive.google.com/uc?export=download&id=1abc...XYZ" (URL já formada)
    */
   publicDownloadUrl(fileId: string): string {
-    return `https://drive.google.com/uc?export=download&id=${fileId}`;
+    return `https://drive.google.com/uc?export=download&id=${extractDriveFileId(fileId)}`;
   }
 
   /**

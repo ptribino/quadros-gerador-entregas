@@ -256,6 +256,24 @@ async function ensureSchema(pool: mysql.Pool) {
     }
   }
 
+  // Backfill: corrige URLs de imageUrl4 que tenham `id=d/...` (bug de
+  // sanitização do ID quando o env var foi setado com prefixo `d/`).
+  try {
+    const [fixRes]: any = await pool.query(
+      `UPDATE products
+         SET imageUrl4 = REPLACE(imageUrl4, '&id=d/', '&id=')
+       WHERE imageUrl4 LIKE '%&id=d/%'`,
+    );
+    if (fixRes?.affectedRows) {
+      console.log(`[startupMigrate] Backfill imageUrl4: ${fixRes.affectedRows} URLs corrigidas`);
+    }
+  } catch (err) {
+    console.warn(
+      "[startupMigrate] Backfill imageUrl4 falhou:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   // Backfill: encurta SKUs e modelos longos (formato antigo
   // "QTK - 001 - ABS - APC - 01 - Nome Longo Do Produto" → "QTK - 001 - ABS - APC - 01").
   // Idempotente: depois da primeira execução o WHERE não casa mais nada.

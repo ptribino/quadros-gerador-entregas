@@ -58,7 +58,9 @@ export default function CatalogPage() {
   const updateStatusMutation = trpc.catalog.updateProductStatus.useMutation({
     onSuccess: (res) => {
       toast.success(`${res.updated} produtos atualizados`);
-      setSelectedIds(new Set());
+      // NÃO limpa a seleção: o usuário tipicamente quer aprovar e em seguida
+      // gerar imagens dos mesmos itens. Preservar selectedIds evita ter que
+      // re-marcar todos os checkboxes.
       utils.catalog.listSuggestions.invalidate();
     },
     onError: (err) => toast.error(err.message),
@@ -93,7 +95,11 @@ export default function CatalogPage() {
 
   const enqueueMutation = trpc.catalog.enqueueGeneration.useMutation({
     onSuccess: (res) => {
-      toast.success(`${res.queued} produtos enfileirados para geração`);
+      const minutes = Math.ceil(res.queued * 1.5);
+      toast.success(
+        `${res.queued} produtos na fila — ~${minutes} min total. Acompanhe na coluna GERAÇÃO.`,
+        { duration: 6000 },
+      );
       utils.catalog.listSuggestions.invalidate();
       utils.catalog.generationStatus.invalidate();
     },
@@ -237,14 +243,15 @@ export default function CatalogPage() {
       </Card>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <div>
-            <CardTitle className="text-base">Sugestões</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {productsQuery.data?.length ?? 0} produtos · {selectedIds.size} selecionado(s)
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+        <CardHeader className="space-y-2 pb-3">
+          <div className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle className="text-base">Sugestões</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {productsQuery.data?.length ?? 0} produtos · {selectedIds.size} selecionado(s)
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
               <SelectTrigger className="w-40">
                 <SelectValue />
@@ -330,16 +337,43 @@ export default function CatalogPage() {
               {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
             </Button>
           </div>
+          </div>
+          <div className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900 ring-1 ring-blue-100">
+            <span className="font-medium">Como funciona:</span>{" "}
+            (1) marque os produtos com <kbd className="rounded bg-white px-1 py-0.5 ring-1 ring-blue-200">checkbox</kbd>,{" "}
+            (2) clique <strong>Aprovar</strong>,{" "}
+            (3) com os mesmos produtos ainda marcados, clique <strong>Gerar imagens</strong> — o sistema gera 3 imagens por produto (~1.5 min cada) e salva na sua pasta do Drive.{" "}
+            (4) Quando a coluna GERAÇÃO mostrar <strong className="text-emerald-600">✅ pronto</strong>, clique <strong>Exportar Tray</strong> e importe na sua loja.
+          </div>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
           {generationStatusQuery.data && (generationStatusQuery.data.queued + generationStatusQuery.data.running) > 0 && (
-            <div className="border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
-              <span className="font-medium">Fila:</span>{" "}
-              {generationStatusQuery.data.running} em processamento ·{" "}
-              {generationStatusQuery.data.queued} aguardando ·{" "}
-              {generationStatusQuery.data.done} prontos ·{" "}
-              {generationStatusQuery.data.errored} com erro
-            </div>
+            (() => {
+              const s = generationStatusQuery.data;
+              const total = s.queued + s.running + s.done + s.errored;
+              const pct = total > 0 ? Math.round(((s.done + s.errored) / total) * 100) : 0;
+              const remaining = s.queued + s.running;
+              const minutesLeft = Math.max(1, Math.ceil(remaining * 1.5));
+              return (
+                <div className="border-b bg-blue-50 px-4 py-2 text-xs">
+                  <div className="flex items-center justify-between text-blue-900">
+                    <span>
+                      🎨 <span className="font-medium">Geração em andamento:</span>{" "}
+                      {s.done}/{total} prontos ({pct}%) · ~{minutesLeft} min restantes
+                    </span>
+                    {s.errored > 0 && (
+                      <span className="text-destructive">{s.errored} com erro</span>
+                    )}
+                  </div>
+                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
+                    <div
+                      className="h-full bg-blue-500 transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()
           )}
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-xs uppercase text-muted-foreground">
@@ -432,12 +466,12 @@ function generationCellLabel(p: GenInfo): React.ReactNode {
   if (p.genError && p.genCompletedAt) {
     return <span className="text-destructive" title={p.genError}>❌ falha</span>;
   }
-  if (p.imageUrl1 && p.imageUrl2 && p.imageUrl3) return <span>✅ 3/3</span>;
+  if (p.imageUrl1 && p.imageUrl2 && p.imageUrl3) return <span className="font-medium text-emerald-600">✅ pronto</span>;
   if (p.genStartedAt && !p.genCompletedAt) {
-    return <span>⚙️ {p.genStep ?? 0}/3</span>;
+    return <span className="text-blue-600">⚙️ gerando {p.genStep ?? 0}/3</span>;
   }
-  if (p.genQueuedAt) return <span>⏳ na fila</span>;
-  return <span className="text-muted-foreground">—</span>;
+  if (p.genQueuedAt) return <span className="text-amber-600">⏳ na fila</span>;
+  return <span className="text-muted-foreground text-xs">não gerado</span>;
 }
 
 function statusVariant(

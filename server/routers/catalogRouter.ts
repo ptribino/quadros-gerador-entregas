@@ -386,8 +386,9 @@ export const catalogRouter = router({
       // produtos novos (Tray gera os IDs); preencher só ao atualizar.
       // URL pública do arquivo de "tamanhos / cores das molduras",
       // usada como imageUrl4 fallback caso o produto não tenha sido gerado.
+      // `publicDownloadUrl` sanitiza o ID se vier com `d/` ou URL completa.
       const sizeRefUrl = ENV.driveSizeReferenceFileId
-        ? `https://drive.google.com/uc?export=download&id=${ENV.driveSizeReferenceFileId}`
+        ? googleDriveService.publicDownloadUrl(ENV.driveSizeReferenceFileId)
         : "";
 
       const wb = new ExcelJS.Workbook();

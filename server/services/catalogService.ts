@@ -136,7 +136,9 @@ export async function analyzeImageForCatalog(args: {
       responseMimeType: "application/json",
       responseSchema: RESPONSE_SCHEMA,
       temperature: 0.7,
-      maxOutputTokens: 2048,
+      // 2048 cortava a descrição HTML no meio em ~30% das chamadas;
+      // 8192 dá folga pro template completo (h2 + 3× h3 + ul de 4 items).
+      maxOutputTokens: 8192,
     },
   };
 
