@@ -9,7 +9,6 @@
  * Cada produto = 1 invocação de `runForProduct`. O worker chama esta
  * função em background uma vez por job da fila.
  */
-import sharp from "sharp";
 import { ENV } from "../_core/env";
 import { googleDriveService } from "./googleDriveService";
 import { googleImagenService } from "./freepikService";
@@ -54,41 +53,13 @@ function sanitizeFolderName(name: string): string {
 }
 
 /**
- * Garante que a imagem cabe nos requisitos do e-commerce:
- *   - max 2500px na maior dimensão
- *   - até 1MB de tamanho final (JPEG progressivo)
- * Usa qualidade adaptativa: tenta 85, depois 75/65/55 se passou de 1MB.
+ * Resize/compressão das imagens geradas foi removida temporariamente —
+ * a dependência `sharp` causava timeout no build do Railway (>28min).
+ * As imagens do Gemini saem em ~1500px JPEG ~500KB-1.5MB, dentro do
+ * razoável pra Tray. Se virar problema, podemos reintroduzir via:
+ *   - jimp (JS puro, mais lento mas sem deps nativas)
+ *   - serviço externo (Cloudinary, imgproxy)
  */
-const MAX_DIMENSION = 2500;
-const MAX_FILE_BYTES = 1024 * 1024;
-
-async function fitForEcommerce(
-  buffer: Buffer,
-): Promise<{ buffer: Buffer; mimeType: string }> {
-  let pipeline = sharp(buffer).rotate().resize({
-    width: MAX_DIMENSION,
-    height: MAX_DIMENSION,
-    fit: "inside",
-    withoutEnlargement: true,
-  });
-
-  for (const quality of [85, 75, 65, 55, 45]) {
-    const out = await pipeline
-      .clone()
-      .jpeg({ quality, progressive: true, mozjpeg: true })
-      .toBuffer();
-    if (out.length <= MAX_FILE_BYTES) {
-      return { buffer: out, mimeType: "image/jpeg" };
-    }
-  }
-  // Última tentativa: força redução adicional de dimensão
-  const fallback = await sharp(buffer)
-    .rotate()
-    .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 60, progressive: true, mozjpeg: true })
-    .toBuffer();
-  return { buffer: fallback, mimeType: "image/jpeg" };
-}
 
 /**
  * Gera UMA imagem chamando o gerador existente (Gemini 2.5 Flash Image).
@@ -177,9 +148,8 @@ export async function runForProduct(
   const frame: FrameType = pickRandom(FRAMES);
   const lifestyleAmbient: AmbientType = pickRandom(REGULAR_AMBIENTS);
 
-  // ETAPA 2 — Lifestyle (ambiente regular). Resize/compress antes do upload.
-  const lifeRaw = await generateOne("lifestyle", frame, lifestyleAmbient, referenceDataUrl);
-  const life = await fitForEcommerce(lifeRaw.buffer);
+  // ETAPA 2 — Lifestyle (ambiente regular)
+  const life = await generateOne("lifestyle", frame, lifestyleAmbient, referenceDataUrl);
   const lifeFile = await googleDriveService.uploadFile(
     accessToken,
     `${product.sku}-lifestyle-${frame}-${lifestyleAmbient}.jpg`,
@@ -191,8 +161,7 @@ export async function runForProduct(
   await onProgress?.(1, `lifestyle ${frame}/${lifestyleAmbient}`);
 
   // ETAPA 3 — Lifestyle profissional (ambiente "corporate")
-  const proRaw = await generateOne("lifestyle", frame, "corporate", referenceDataUrl);
-  const pro = await fitForEcommerce(proRaw.buffer);
+  const pro = await generateOne("lifestyle", frame, "corporate", referenceDataUrl);
   const proFile = await googleDriveService.uploadFile(
     accessToken,
     `${product.sku}-lifestyle-${frame}-corporate.jpg`,
@@ -204,8 +173,7 @@ export async function runForProduct(
   await onProgress?.(2, `lifestyle ${frame}/corporate`);
 
   // ETAPA 4 — Mockup
-  const mockRaw = await generateOne("mockup", frame, undefined, referenceDataUrl);
-  const mock = await fitForEcommerce(mockRaw.buffer);
+  const mock = await generateOne("mockup", frame, undefined, referenceDataUrl);
   const mockFile = await googleDriveService.uploadFile(
     accessToken,
     `${product.sku}-mockup-${frame}.jpg`,
