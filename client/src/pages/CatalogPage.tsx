@@ -17,7 +17,28 @@ import {
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 
-type StatusFilter = "all" | "suggested" | "approved" | "rejected" | "exported";
+type StatusFilter =
+  | "all"
+  | "suggested"
+  | "approved"
+  | "generating"
+  | "generated"
+  | "exported"
+  | "rejected"
+  | "error";
+type GenFilter = "all" | "generated" | "in_progress" | "queued" | "failed" | "none";
+type SortKey = "sku" | "nome" | "potencial" | "status" | "geracao";
+type SortDir = "asc" | "desc";
+
+const GEN_RANK: Record<GenFilter, number> = {
+  // usado pra ordenar a coluna "Geração" (mais avançado → mais "pronto")
+  all: 0,
+  none: 0,
+  queued: 1,
+  in_progress: 2,
+  failed: 3,
+  generated: 4,
+};
 
 export default function CatalogPage() {
   const { user, loading: authLoading } = useAuth();
@@ -25,6 +46,10 @@ export default function CatalogPage() {
   const [folderId, setFolderId] = useState<string>("");
   const [count, setCount] = useState<number>(15);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("suggested");
+  const [genFilter, setGenFilter] = useState<GenFilter>("all");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const utils = trpc.useUtils();
@@ -122,6 +147,56 @@ export default function CatalogPage() {
     },
   );
 
+  const visibleProducts = useMemo(() => {
+    const list = productsQuery.data ?? [];
+    const term = searchTerm.trim().toLowerCase();
+    const bySearch = term
+      ? list.filter((p) => {
+          const haystack = [
+            p.sku,
+            p.nome,
+            p.marca,
+            p.modelo,
+            p.aiPalavrasChave,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(term);
+        })
+      : list;
+    const filtered = genFilter === "all"
+      ? bySearch
+      : bySearch.filter((p) => classifyGen(p) === genFilter);
+    if (!sortKey) return filtered;
+    const dir = sortDir === "asc" ? 1 : -1;
+    const cmp = (a: number | string, b: number | string) =>
+      a < b ? -1 * dir : a > b ? 1 * dir : 0;
+    return [...filtered].sort((a, b) => {
+      switch (sortKey) {
+        case "sku":
+          return cmp(a.sku ?? "", b.sku ?? "");
+        case "nome":
+          return cmp((a.nome ?? "").toLowerCase(), (b.nome ?? "").toLowerCase());
+        case "potencial":
+          return cmp(a.aiPotencialVenda ?? -1, b.aiPotencialVenda ?? -1);
+        case "status":
+          return cmp(a.status ?? "", b.status ?? "");
+        case "geracao":
+          return cmp(GEN_RANK[classifyGen(a)], GEN_RANK[classifyGen(b)]);
+      }
+    });
+  }, [productsQuery.data, genFilter, searchTerm, sortKey, sortDir]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
   const folderByName = useMemo(() => {
     const map = new Map<number, { id: string; name: string } | null>();
     if (!foldersQuery.data || !categoriesQuery.data) return map;
@@ -151,8 +226,8 @@ export default function CatalogPage() {
   };
 
   const selectAll = () => {
-    if (!productsQuery.data) return;
-    setSelectedIds(new Set(productsQuery.data.map((p) => p.id)));
+    if (!visibleProducts.length) return;
+    setSelectedIds(new Set(visibleProducts.map((p) => p.id)));
   };
 
   const clearSelection = () => setSelectedIds(new Set());
@@ -248,10 +323,20 @@ export default function CatalogPage() {
             <div>
               <CardTitle className="text-base">Sugestões</CardTitle>
               <p className="text-xs text-muted-foreground">
-                {productsQuery.data?.length ?? 0} produtos · {selectedIds.size} selecionado(s)
+                {visibleProducts.length} produtos
+                {productsQuery.data && visibleProducts.length !== productsQuery.data.length && (
+                  <> de {productsQuery.data.length}</>
+                )}{" "}
+                · {selectedIds.size} selecionado(s)
               </p>
             </div>
             <div className="flex items-center gap-2">
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por SKU, nome, marca..."
+              className="w-56"
+            />
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
               <SelectTrigger className="w-40">
                 <SelectValue />
@@ -260,8 +345,24 @@ export default function CatalogPage() {
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="suggested">Sugeridos</SelectItem>
                 <SelectItem value="approved">Aprovados</SelectItem>
-                <SelectItem value="rejected">Rejeitados</SelectItem>
+                <SelectItem value="generating">Gerando</SelectItem>
+                <SelectItem value="generated">Gerados</SelectItem>
                 <SelectItem value="exported">Exportados</SelectItem>
+                <SelectItem value="rejected">Rejeitados</SelectItem>
+                <SelectItem value="error">Com erro</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={genFilter} onValueChange={(v) => setGenFilter(v as GenFilter)}>
+              <SelectTrigger className="w-44" title="Filtrar por status de geração de imagens">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Geração: todos</SelectItem>
+                <SelectItem value="generated">✅ pronto</SelectItem>
+                <SelectItem value="in_progress">⚙️ gerando</SelectItem>
+                <SelectItem value="queued">⏳ na fila</SelectItem>
+                <SelectItem value="failed">❌ falha</SelectItem>
+                <SelectItem value="none">Não gerado</SelectItem>
               </SelectContent>
             </Select>
             <Button size="sm" variant="outline" onClick={selectAll}>
@@ -379,16 +480,16 @@ export default function CatalogPage() {
             <thead className="border-b bg-muted/50 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="w-10 px-3 py-2"></th>
-                <th className="px-3 py-2 text-left">SKU</th>
-                <th className="px-3 py-2 text-left">Nome</th>
-                <th className="px-3 py-2 text-center">Potencial</th>
-                <th className="px-3 py-2 text-left">Status</th>
-                <th className="px-3 py-2 text-left">Geração</th>
+                <SortableTh label="SKU" sortKey="sku" current={sortKey} dir={sortDir} onClick={toggleSort} />
+                <SortableTh label="Nome" sortKey="nome" current={sortKey} dir={sortDir} onClick={toggleSort} />
+                <SortableTh label="Potencial" sortKey="potencial" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
+                <SortableTh label="Status" sortKey="status" current={sortKey} dir={sortDir} onClick={toggleSort} />
+                <SortableTh label="Geração" sortKey="geracao" current={sortKey} dir={sortDir} onClick={toggleSort} />
                 <th className="px-3 py-2 text-left">Origem</th>
               </tr>
             </thead>
             <tbody>
-              {productsQuery.data?.map((p) => (
+              {visibleProducts.map((p) => (
                 <tr key={p.id} className="border-b hover:bg-muted/20">
                   <td className="px-3 py-2">
                     <Checkbox
@@ -435,7 +536,7 @@ export default function CatalogPage() {
                   </td>
                 </tr>
               ))}
-              {productsQuery.data && productsQuery.data.length === 0 && (
+              {productsQuery.data && visibleProducts.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                     Nenhuma sugestão neste filtro. Gere sugestões acima.
@@ -461,6 +562,47 @@ type GenInfo = {
   genError?: string | null;
   genQueuedAt?: Date | string | null;
 };
+
+function classifyGen(p: GenInfo): Exclude<GenFilter, "all"> {
+  if (p.imageUrl1 && p.imageUrl2 && p.imageUrl3) return "generated";
+  if (p.genError && p.genCompletedAt) return "failed";
+  if (p.genStartedAt && !p.genCompletedAt) return "in_progress";
+  if (p.genQueuedAt) return "queued";
+  return "none";
+}
+
+function SortableTh({
+  label,
+  sortKey,
+  current,
+  dir,
+  onClick,
+  align = "left",
+}: {
+  label: string;
+  sortKey: SortKey;
+  current: SortKey | null;
+  dir: SortDir;
+  onClick: (k: SortKey) => void;
+  align?: "left" | "center";
+}) {
+  const active = current === sortKey;
+  const arrow = active ? (dir === "asc" ? "▲" : "▼") : "";
+  return (
+    <th className={`px-3 py-2 ${align === "center" ? "text-center" : "text-left"}`}>
+      <button
+        type="button"
+        onClick={() => onClick(sortKey)}
+        className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-foreground ${
+          active ? "text-foreground" : ""
+        }`}
+      >
+        {label}
+        <span className="text-[10px]">{arrow || "↕"}</span>
+      </button>
+    </th>
+  );
+}
 
 function generationCellLabel(p: GenInfo): React.ReactNode {
   if (p.genError && p.genCompletedAt) {
