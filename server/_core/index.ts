@@ -43,6 +43,15 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Proxy de imagem do Drive com extensão .jpg/.png na URL —
+  // a Tray valida URLs pela extensão; o Drive não tem (uc?id=...).
+  // Esse handler 302-redireciona pro Drive mantendo a extensão na URL pública.
+  app.get(/^\/api\/img\/([A-Za-z0-9_-]+)\.(jpg|jpeg|png|webp)$/, (req, res) => {
+    const fileId = req.params[0];
+    res.redirect(302, `https://drive.google.com/uc?export=download&id=${fileId}`);
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

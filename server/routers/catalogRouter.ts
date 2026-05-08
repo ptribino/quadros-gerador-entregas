@@ -432,9 +432,10 @@ export const catalogRouter = router({
         const plainText = (p.descricaoHtml ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         const seoDesc = plainText.slice(0, 160);
 
+        // `id`/`catId` propositadamente OMITIDOS: a Tray rejeita string vazia
+        // como "valor numérico permitido" e exige célula realmente nula
+        // (= produto novo, ID atribuído pela própria Tray no import).
         ws.addRow({
-          id: "",          // vazio = produto novo (Tray gera)
-          catId: "",       // preencher manualmente com ID da categoria criada na Tray
           nome: p.nome,
           html: p.descricaoHtml ?? "",
           // imageUrl1 = lifestyle, 2 = profissional, 3 = mockup

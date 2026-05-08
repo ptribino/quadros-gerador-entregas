@@ -274,6 +274,30 @@ async function ensureSchema(pool: mysql.Pool) {
     );
   }
 
+  // Backfill: troca URLs Drive direto (sem extensão) pelo proxy do app
+  // (que tem `.jpg` no path — Tray exige extensão na URL).
+  // Só roda se PUBLIC_APP_URL estiver setado (senão deixa as URLs Drive direto).
+  const publicAppUrl = (process.env.PUBLIC_APP_URL || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "")).replace(/\/$/, "");
+  if (publicAppUrl) {
+    for (const col of ["imageUrl1", "imageUrl2", "imageUrl3", "imageUrl4"]) {
+      try {
+        // Substitui "https://drive.google.com/uc?export=download&id=<ID>" por
+        // "<publicAppUrl>/api/img/<ID>.jpg"
+        const [res]: any = await pool.query(
+          `UPDATE products
+             SET ${col} = CONCAT(?, '/api/img/', SUBSTRING_INDEX(${col}, 'id=', -1), '.jpg')
+           WHERE ${col} LIKE 'https://drive.google.com/uc?export=download&id=%'`,
+          [publicAppUrl],
+        );
+        if (res?.affectedRows) {
+          console.log(`[startupMigrate] Backfill ${col} -> proxy: ${res.affectedRows} URLs`);
+        }
+      } catch (err) {
+        console.warn(`[startupMigrate] Backfill ${col} falhou:`, err instanceof Error ? err.message : err);
+      }
+    }
+  }
+
   // Backfill: encurta SKUs e modelos longos (formato antigo
   // "QTK - 001 - ABS - APC - 01 - Nome Longo Do Produto" → "QTK - 001 - ABS - APC - 01").
   // Idempotente: depois da primeira execução o WHERE não casa mais nada.

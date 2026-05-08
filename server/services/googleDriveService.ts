@@ -277,19 +277,24 @@ class GoogleDriveService {
   }
 
   /**
-   * URL "uc?export=download&id=..." que a Tray consegue baixar como imagem
-   * direta — desde que o arquivo seja público (`makePublic`).
-   * `view`-style URLs retornam HTML preview, então a Tray falha; daí o
-   * formato `uc?export=download` ser obrigatório.
+   * URL pública pra Tray baixar a imagem.
    *
-   * Aceita qualquer um destes formatos pra `fileId` (sanitiza p/ só o ID):
-   *   - "1abc...XYZ"                                                (ID puro)
-   *   - "d/1abc...XYZ"                                              (path comum no copy/paste)
-   *   - "https://drive.google.com/file/d/1abc...XYZ/view"           (URL completa)
-   *   - "https://drive.google.com/uc?export=download&id=1abc...XYZ" (URL já formada)
+   * A Tray valida URLs pela EXTENSÃO da string (.jpg/.png/...). URLs
+   * diretas do Drive (`uc?export=download&id=...`) não têm extensão e
+   * são rejeitadas. Solução: redirecionamos via `<app-url>/api/img/<id>.jpg`
+   * que 302-redireciona pro Drive mantendo a extensão na URL pública.
+   *
+   * Fallback: se `PUBLIC_APP_URL`/`RAILWAY_PUBLIC_DOMAIN` não estão
+   * configurados (rodando local sem domínio), usa a URL Drive direta.
+   *
+   * Aceita qualquer formato pra `fileId` (sanitiza pra só o ID).
    */
   publicDownloadUrl(fileId: string): string {
-    return `https://drive.google.com/uc?export=download&id=${extractDriveFileId(fileId)}`;
+    const id = extractDriveFileId(fileId);
+    if (ENV.publicAppUrl) {
+      return `${ENV.publicAppUrl.replace(/\/$/, "")}/api/img/${id}.jpg`;
+    }
+    return `https://drive.google.com/uc?export=download&id=${id}`;
   }
 
   /**

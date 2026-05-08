@@ -21,4 +21,11 @@ export const ENV = {
   // Quando setado, vira a 4ª imagem (imageUrl4) de TODOS os produtos no
   // export Tray, sem precisar fazer upload por produto.
   driveSizeReferenceFileId: process.env.DRIVE_SIZE_REFERENCE_FILE_ID ?? "",
+  // URL pública do app (ex: https://quadros-gerador-entregas-production.up.railway.app)
+  // Usada para construir URLs de imagem com extensão .jpg que a Tray aceita.
+  // O Railway expõe RAILWAY_PUBLIC_DOMAIN automaticamente.
+  publicAppUrl:
+    process.env.PUBLIC_APP_URL ||
+    (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "") ||
+    "",
 };
