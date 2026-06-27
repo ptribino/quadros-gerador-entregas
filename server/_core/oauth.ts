@@ -42,7 +42,9 @@ export async function getValidAccessToken(openId: string): Promise<string | unde
     : false;
 
   if (!expired) return tokens.accessToken;
-  if (!tokens.refreshToken) return tokens.accessToken; // sem como renovar — devolve o que tem; chamador pode 401
+  // Sem refresh_token não há como renovar — força re-login devolvendo undefined,
+  // que o driveRouter converte em UNAUTHORIZED.
+  if (!tokens.refreshToken) return undefined;
 
   try {
     const refreshed = await googleDriveService.refreshAccessToken(tokens.refreshToken);
@@ -56,8 +58,11 @@ export async function getValidAccessToken(openId: string): Promise<string | unde
     await db.saveGoogleTokens(openId, updated);
     return refreshed.accessToken;
   } catch (error) {
+    // Refresh falhou (refresh_token revogado, scope removido, rede). Devolver o
+    // token velho só dispararia 401 do Google e router rewrappa como 500.
+    // Devolve undefined → UNAUTHORIZED → frontend redireciona pro login.
     console.error("[OAuth] refresh failed:", error instanceof Error ? error.message : error);
-    return tokens.accessToken;
+    return undefined;
   }
 }
 
