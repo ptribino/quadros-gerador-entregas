@@ -35,9 +35,11 @@ class GoogleDriveService {
   private uploadUrl = 'https://www.googleapis.com/upload/drive/v3';
 
   /**
-   * Renova o access_token usando o refresh_token
+   * Renova o access_token usando o refresh_token. Retorna o novo token e
+   * o `expires_in` em segundos (~3600 na maior parte dos casos) para que o
+   * chamador consiga calcular o `expiresAt` e persistir.
    */
-  async refreshAccessToken(refreshToken: string): Promise<string> {
+  async refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; expiresIn: number }> {
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -54,8 +56,8 @@ class GoogleDriveService {
       throw new Error(`Failed to refresh Google token: ${errorText}`);
     }
 
-    const data = await response.json() as { access_token: string };
-    return data.access_token;
+    const data = await response.json() as { access_token: string; expires_in?: number };
+    return { accessToken: data.access_token, expiresIn: data.expires_in ?? 3600 };
   }
 
   /**

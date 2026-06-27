@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { protectedProcedure, router } from "../_core/trpc";
-import { getGoogleTokens } from "../_core/oauth";
+import { getValidAccessToken } from "../_core/oauth";
 import { googleDriveService } from "../services/googleDriveService";
 import { analyzeImageForCatalog, buildSku, buildSlug } from "../services/catalogService";
 import { getDb } from "../db";
@@ -11,14 +11,14 @@ import { categoryCodes, products, productStatusEnum } from "../../drizzle/schema
 import { ENV } from "../_core/env";
 
 async function requireAccessToken(openId: string): Promise<string> {
-  const tokens = await getGoogleTokens(openId);
-  if (!tokens?.accessToken) {
+  const accessToken = await getValidAccessToken(openId);
+  if (!accessToken) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
       message: "Faça login com Google para acessar o Drive",
     });
   }
-  return tokens.accessToken;
+  return accessToken;
 }
 
 async function requireDb() {

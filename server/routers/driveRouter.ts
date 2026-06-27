@@ -1,22 +1,24 @@
 import { z } from 'zod';
 import { protectedProcedure, router } from '../_core/trpc';
 import { googleDriveService } from '../services/googleDriveService';
-import { getGoogleTokens } from '../_core/oauth';
+import { getValidAccessToken } from '../_core/oauth';
 import { TRPCError } from '@trpc/server';
 
 /**
- * Obtém o access_token do Google do usuário logado.
- * Tenta cache em memória primeiro, depois cai no DB (sobrevive a restart do servidor).
+ * Obtém um access_token válido para o usuário. Lida com 3 caminhos:
+ *   - sem token armazenado → UNAUTHORIZED (frontend redireciona pro login)
+ *   - token vigente → devolve direto
+ *   - token expirado → renova via refresh_token e persiste o novo
  */
 async function getUserAccessToken(openId: string): Promise<string> {
-  const tokens = await getGoogleTokens(openId);
-  if (!tokens?.accessToken) {
+  const accessToken = await getValidAccessToken(openId);
+  if (!accessToken) {
     throw new TRPCError({
       code: 'UNAUTHORIZED',
-      message: 'Faça login com Google para salvar no Drive',
+      message: 'Faça login com Google para acessar o Drive',
     });
   }
-  return tokens.accessToken;
+  return accessToken;
 }
 
 /**

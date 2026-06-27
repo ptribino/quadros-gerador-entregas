@@ -1,6 +1,7 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
+import { googleDriveService } from "../services/googleDriveService";
 import { getSessionCookieOptions } from "./cookies";
 import { ENV } from "./env";
 import { SignJWT } from "jose";
@@ -20,6 +21,44 @@ export async function getGoogleTokens(openId: string) {
     return persisted;
   }
   return undefined;
+}
+
+// Margem de segurança: refresh quando faltar menos de 1 minuto pro `expiresAt`.
+const TOKEN_REFRESH_MARGIN_MS = 60_000;
+
+/**
+ * Devolve um access_token válido para o usuário, renovando proativamente
+ * via refresh_token quando o atual está expirado (ou perto disso).
+ * O token renovado é persistido no DB e no cache em memória.
+ * Retorna `undefined` quando não há tokens (usuário precisa logar de novo).
+ */
+export async function getValidAccessToken(openId: string): Promise<string | undefined> {
+  const tokens = await getGoogleTokens(openId);
+  if (!tokens?.accessToken) return undefined;
+
+  const expiresAt = tokens.expiresAt ?? null;
+  const expired = expiresAt
+    ? expiresAt.getTime() - TOKEN_REFRESH_MARGIN_MS <= Date.now()
+    : false;
+
+  if (!expired) return tokens.accessToken;
+  if (!tokens.refreshToken) return tokens.accessToken; // sem como renovar — devolve o que tem; chamador pode 401
+
+  try {
+    const refreshed = await googleDriveService.refreshAccessToken(tokens.refreshToken);
+    const newExpiresAt = new Date(Date.now() + refreshed.expiresIn * 1000);
+    const updated = {
+      accessToken: refreshed.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: newExpiresAt,
+    };
+    googleTokenStore.set(openId, updated);
+    await db.saveGoogleTokens(openId, updated);
+    return refreshed.accessToken;
+  } catch (error) {
+    console.error("[OAuth] refresh failed:", error instanceof Error ? error.message : error);
+    return tokens.accessToken;
+  }
 }
 
 function getQueryParam(req: Request, key: string): string | undefined {

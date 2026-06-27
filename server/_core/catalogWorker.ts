@@ -14,7 +14,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { products } from "../../drizzle/schema";
 import { runForProduct } from "../services/catalogPipeline";
-import { getGoogleTokens } from "./oauth";
+import { getValidAccessToken } from "./oauth";
 import { getUserByOpenId } from "../db";
 import { eq as eqQ } from "drizzle-orm";
 
@@ -80,8 +80,8 @@ async function processOne(): Promise<boolean> {
   try {
     const openId = await getOpenIdByUserId(p, product.userId);
     if (!openId) throw new Error(`Usuário #${product.userId} não encontrado`);
-    const tokens = await getGoogleTokens(openId);
-    if (!tokens?.accessToken) throw new Error(`Sem token Google para o usuário ${openId}`);
+    const accessToken = await getValidAccessToken(openId);
+    if (!accessToken) throw new Error(`Sem token Google para o usuário ${openId}`);
 
     const result = await runForProduct(
       {
@@ -90,7 +90,7 @@ async function processOne(): Promise<boolean> {
         nome: product.nome,
         sourceDriveFileId: product.sourceDriveFileId,
       },
-      { accessToken: tokens.accessToken },
+      { accessToken },
       async (step, message) => {
         await db
           .update(products)
