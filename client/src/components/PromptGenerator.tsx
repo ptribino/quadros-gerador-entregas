@@ -7,7 +7,7 @@ import ImageSelector from './ImageSelector';
 
 type DeliveryType = 'lifestyle' | 'mockup' | 'video';
 type FrameType = 'pine' | 'aluminum';
-type EnvironmentType = 'scandinavian' | 'modern';
+type EnvironmentType = 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
 
 interface PromptGeneratorProps {
   kitSize?: number;
@@ -27,9 +27,12 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
     aluminum: 'matte black aluminum',
   };
 
-  const environmentDescriptions = {
+  const environmentDescriptions: Record<EnvironmentType, string> = {
     scandinavian: 'Scandinavian living room, white plaster wall, light oak floating shelf below, ceramic vase with dried pampas grass, linen sofa in warm white, warm whites and sage green palette, eye-level wide shot, minimalist decor, not overly staged.',
     modern: 'Modern contemporary apartment living room, white walls, light concrete floor, low-profile modular sofa in light gray, indoor fiddle leaf fig plant, large window with soft diffused light, cool neutral palette with natural wood accents, wide angle eye-level shot, upscale residential feel, not a showroom.',
+    corporate: 'Upscale corporate office interior, executive meeting room or private office, white or light gray painted wall, sleek office desk or conference table visible in the foreground, ergonomic office chairs, subtle corporate decor — potted plant, stacked books, laptop — large window with soft natural light filtering through blinds, polished concrete or neutral carpet floor, professional and elegant atmosphere, gender-neutral environment.',
+    kitchen: 'Modern Brazilian kitchen and dining area, light oak wooden dining table with four upholstered chairs in warm beige linen, ceramic tableware and a fresh fruit bowl on the table, white shaker-style cabinets with brushed brass handles in the background, light quartz or marble countertop, single black pendant light hanging above the table, white painted wall, terracotta or light wood floor, small herb pots on the windowsill, warm natural daylight from a side window, cozy lived-in family atmosphere, not staged, not a showroom.',
+    kids: "Bright cheerful children's bedroom, soft pastel palette of dusty pink, mint green and warm cream, low children's bed with crisp white linens and a few plush toys, light wood floor with a small geometric play rug, a low wooden bookshelf with picture books and stuffed animals, sheer white curtains diffusing soft natural daylight, simple wooden toys arranged neatly, indoor potted plant, playful and magical but tasteful and uncluttered childhood atmosphere, real lived-in family home, not a showroom.",
   };
 
   const basePrompts = {
@@ -141,8 +144,11 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
               <label className="block text-sm font-semibold text-foreground">Estilo de Ambiente</label>
               <div className="space-y-2">
                 {[
-                  { value: 'scandinavian' as const, label: 'Escandinavo/Clean' },
-                  { value: 'modern' as const, label: 'Moderno/Contemporâneo' },
+                  { value: 'scandinavian' as const, label: 'Escandinavo / Clean' },
+                  { value: 'modern' as const, label: 'Moderno / Contemporâneo' },
+                  { value: 'corporate' as const, label: 'Corporativo' },
+                  { value: 'kitchen' as const, label: 'Cozinha / Área de Jantar' },
+                  { value: 'kids' as const, label: 'Infantil' },
                 ].map((option) => (
                   <label key={option.value} className="flex items-center space-x-3 cursor-pointer group">
                     <input

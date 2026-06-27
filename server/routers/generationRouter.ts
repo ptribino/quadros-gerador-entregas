@@ -17,7 +17,7 @@ export const generationRouter = router({
         imageUrl: z.string().url('URL da imagem inválida'),
         deliveryTypes: z.array(z.enum(['lifestyle', 'mockup', 'video'])).default(['lifestyle', 'mockup', 'video']),
         frameType: z.enum(['pine', 'aluminum']).default('pine'),
-        environmentType: z.enum(['scandinavian', 'modern', 'corporate']).optional(),
+        environmentType: z.enum(['scandinavian', 'modern', 'corporate', 'kitchen', 'kids']).optional(),
       })
     )
     .mutation(async ({ input }) => {

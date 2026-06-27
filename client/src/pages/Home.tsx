@@ -13,7 +13,7 @@ import GenerationResults from '@/components/GenerationResults';
 
 type DeliveryType = 'lifestyle' | 'mockup' | 'video';
 type FrameType = 'pine' | 'aluminum';
-type EnvironmentType = 'scandinavian' | 'modern' | 'corporate';
+type EnvironmentType = 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
 
 interface GeneratedItem {
   id: string;
@@ -337,6 +337,8 @@ export default function Home() {
                     { value: 'scandinavian' as const, label: 'Escandinavo / Clean' },
                     { value: 'modern' as const, label: 'Moderno / Contemporâneo' },
                     { value: 'corporate' as const, label: 'Corporativo' },
+                    { value: 'kitchen' as const, label: 'Cozinha / Área de Jantar' },
+                    { value: 'kids' as const, label: 'Infantil' },
                   ].map((option) => (
                     <label key={option.value} className="flex items-center space-x-3 cursor-pointer group">
                       <input
