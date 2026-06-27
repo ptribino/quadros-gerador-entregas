@@ -1,8 +1,8 @@
 import { ENV } from '../_core/env';
 
 // ============================================================
-// Google Gemini 2.5 Flash Image — image generation with reference
-// Uses gemini-2.5-flash-image model via generateContent endpoint
+// Google Gemini 3.1 Flash Image — image generation with reference
+// Uses gemini-3.1-flash-image model via generateContent endpoint
 // ============================================================
 
 export interface ImagenGenerationRequest {
@@ -32,7 +32,7 @@ class GoogleImagenService {
   }
 
   /**
-   * Gera imagens usando Gemini 2.5 Flash Image via generateContent
+   * Gera imagens usando Gemini 3.1 Flash Image via generateContent
    * Suporta imagem de referência nativa (multimodal input)
    */
   async generateImages(request: ImagenGenerationRequest): Promise<ImagenGenerationResponse> {
@@ -41,7 +41,7 @@ class GoogleImagenService {
     }
 
     try {
-      const model = 'gemini-2.5-flash-image';
+      const model = 'gemini-3.1-flash-image';
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
 
       // Monta as parts: imagem de referência (se houver) + prompt de texto
