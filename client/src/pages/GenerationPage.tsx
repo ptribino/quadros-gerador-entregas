@@ -8,14 +8,52 @@ import ImageSelector from '@/components/ImageSelector';
 import GenerationResults from '@/components/GenerationResults';
 
 type FrameType = 'light_wood' | 'dark_wood' | 'white' | 'black';
-type EnvironmentType = 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
+type RoomType =
+  | 'living_room'
+  | 'bedroom'
+  | 'kids_room'
+  | 'office'
+  | 'kitchen'
+  | 'bathroom'
+  | 'gourmet_area';
+type StyleType =
+  | 'scandinavian'
+  | 'japandi'
+  | 'minimalist'
+  | 'boho'
+  | 'classic'
+  | 'contemporary'
+  | 'industrial'
+  | 'rustic';
+
+const ROOM_OPTIONS: ReadonlyArray<{ value: RoomType; label: string }> = [
+  { value: 'living_room', label: 'Sala' },
+  { value: 'bedroom', label: 'Quarto' },
+  { value: 'kids_room', label: 'Quarto Infantil' },
+  { value: 'office', label: 'Escritório' },
+  { value: 'kitchen', label: 'Cozinha / Área de Jantar' },
+  { value: 'bathroom', label: 'Lavabo' },
+  { value: 'gourmet_area', label: 'Área Gourmet' },
+];
+
+const STYLE_OPTIONS: ReadonlyArray<{ value: StyleType; label: string }> = [
+  { value: 'scandinavian', label: 'Escandinavo' },
+  { value: 'japandi', label: 'Japandi' },
+  { value: 'minimalist', label: 'Minimalista' },
+  { value: 'boho', label: 'Boho' },
+  { value: 'classic', label: 'Clássico' },
+  { value: 'contemporary', label: 'Contemporâneo' },
+  { value: 'industrial', label: 'Industrial' },
+  { value: 'rustic', label: 'Rústico' },
+];
 
 interface GeneratedImage {
   id: string;
   url: string;
   type: 'lifestyle' | 'mockup' | 'video';
   frameType: FrameType;
-  environmentType?: EnvironmentType;
+  roomType?: RoomType;
+  styleType?: StyleType;
   prompt: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error?: string;
@@ -26,7 +64,8 @@ export default function GenerationPage() {
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [frameType, setFrameType] = useState<FrameType>('light_wood');
-  const [environmentType, setEnvironmentType] = useState<EnvironmentType>('scandinavian');
+  const [roomType, setRoomType] = useState<RoomType>('living_room');
+  const [styleType, setStyleType] = useState<StyleType>('scandinavian');
 
   const generateMutation = trpc.generation.generateImages.useMutation();
   const saveImageMutation = trpc.drive.saveImage.useMutation();
@@ -43,16 +82,17 @@ export default function GenerationPage() {
         imageUrl: selectedImage.url,
         deliveryTypes: ['lifestyle', 'mockup', 'video'],
         frameType,
-        environmentType,
+        roomType,
+        styleType,
       });
 
-      // Mapeia os resultados para o formato esperado
       const images: GeneratedImage[] = result.results.map((r, index) => ({
         id: `${r.generationId}-${index}`,
         url: r.images?.[0]?.url || '',
         type: r.type,
         frameType: r.frameType,
-        environmentType: r.environmentType,
+        roomType: r.roomType,
+        styleType: r.styleType,
         prompt: r.prompt,
         status: r.status as any,
         error: r.error,
@@ -145,34 +185,40 @@ export default function GenerationPage() {
                 </div>
               </div>
 
-              {/* Environment Type */}
+              {/* Ambiente (cômodo) */}
               <div className="space-y-3">
                 <label className="block text-sm font-semibold text-foreground">
-                  Estilo de Ambiente (Lifestyle)
+                  Ambiente (cômodo)
                 </label>
-                <div className="space-y-2">
-                  {[
-                    { value: 'scandinavian' as const, label: 'Escandinavo / Clean' },
-                    { value: 'modern' as const, label: 'Moderno / Contemporâneo' },
-                    { value: 'corporate' as const, label: 'Corporativo' },
-                    { value: 'kitchen' as const, label: 'Cozinha / Área de Jantar' },
-                    { value: 'kids' as const, label: 'Infantil' },
-                  ].map((option) => (
-                    <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="environment"
-                        value={option.value}
-                        checked={environmentType === option.value}
-                        onChange={(e) =>
-                          setEnvironmentType(e.target.value as EnvironmentType)
-                        }
-                        className="w-4 h-4 accent-primary"
-                      />
-                      <span className="text-sm text-foreground">{option.label}</span>
-                    </label>
+                <select
+                  value={roomType}
+                  onChange={(e) => setRoomType(e.target.value as RoomType)}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {ROOM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
-                </div>
+                </select>
+              </div>
+
+              {/* Estilo de Decoração */}
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-foreground">
+                  Estilo de Decoração
+                </label>
+                <select
+                  value={styleType}
+                  onChange={(e) => setStyleType(e.target.value as StyleType)}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {STYLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Generate Button */}

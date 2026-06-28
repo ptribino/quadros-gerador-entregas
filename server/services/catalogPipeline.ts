@@ -13,10 +13,10 @@ import sharp from "sharp";
 import { ENV } from "../_core/env";
 import { googleDriveService } from "./googleDriveService";
 import { googleImagenService } from "./freepikService";
-import { promptAgentService } from "./promptAgentService";
+import { promptAgentService, FRAMES, STYLES } from "./promptAgentService";
+import type { FrameType, RoomType, StyleType } from "./promptAgentService";
 
-export type FrameType = "light_wood" | "dark_wood" | "white" | "black";
-export type AmbientType = "scandinavian" | "modern" | "corporate" | "kitchen" | "kids";
+export type { FrameType, RoomType, StyleType };
 
 export interface PipelineDeps {
   /** Token Google OAuth do usuário dono do produto. */
@@ -42,8 +42,17 @@ function pickRandom<T>(list: readonly T[]): T {
   return list[Math.floor(Math.random() * list.length)]!;
 }
 
-const FRAMES: readonly FrameType[] = ["light_wood", "dark_wood", "white", "black"];
-const REGULAR_AMBIENTS: readonly AmbientType[] = ["scandinavian", "modern", "kitchen", "kids"];
+/**
+ * Cômodos elegíveis para a lifestyle "regular" do catálogo automatizado.
+ * Excluímos `office` (esse é forçado na lifestyle profissional) e ambientes
+ * "molhados" (bathroom, gourmet_area) que costumam render quadros mal.
+ */
+const REGULAR_ROOMS: readonly RoomType[] = [
+  "living_room",
+  "bedroom",
+  "kids_room",
+  "kitchen",
+];
 
 /**
  * Sanitiza o nome do produto para virar nome de pasta no Drive.
@@ -53,12 +62,6 @@ function sanitizeFolderName(name: string): string {
   return name.replace(/[\\/:*?"<>|]/g, "").slice(0, 100).trim();
 }
 
-/**
- * Garante que a imagem cabe nos requisitos do e-commerce:
- *   - max 2500px na maior dimensão
- *   - até 1MB de tamanho final (JPEG progressivo)
- * Usa qualidade adaptativa: tenta 85, depois 75/65/55 se passou de 1MB.
- */
 const MAX_DIMENSION = 2500;
 const MAX_FILE_BYTES = 1024 * 1024;
 
@@ -81,7 +84,6 @@ async function fitForEcommerce(
       return { buffer: out, mimeType: "image/jpeg" };
     }
   }
-  // Última tentativa: força redução adicional de dimensão
   const fallback = await sharp(buffer)
     .rotate()
     .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
@@ -92,18 +94,30 @@ async function fitForEcommerce(
 
 /**
  * Gera UMA imagem chamando o gerador existente (Gemini 2.5 Flash Image).
- * Usa os prompts já cadastrados em prompts_gerados.md via promptAgentService.
  */
-async function generateOne(
-  type: "lifestyle" | "mockup",
+async function generateLifestyle(
   frame: FrameType,
-  ambient: AmbientType | undefined,
+  room: RoomType,
+  style: StyleType,
   referenceDataUrl: string,
 ): Promise<{ buffer: Buffer; mimeType: string }> {
-  const prompt = type === "lifestyle"
-    ? promptAgentService.getPrompt("lifestyle", frame, ambient)
-    : promptAgentService.getPrompt("mockup", frame);
+  const prompt = promptAgentService.getPrompt("lifestyle", frame, room, style);
+  return runGeneration(prompt, referenceDataUrl, `lifestyle/${frame}/${room}/${style}`);
+}
 
+async function generateMockup(
+  frame: FrameType,
+  referenceDataUrl: string,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const prompt = promptAgentService.getPrompt("mockup", frame);
+  return runGeneration(prompt, referenceDataUrl, `mockup/${frame}`);
+}
+
+async function runGeneration(
+  prompt: string,
+  referenceDataUrl: string,
+  label: string,
+): Promise<{ buffer: Buffer; mimeType: string }> {
   const result = await googleImagenService.generateImages({
     prompt,
     referenceImageUrl: referenceDataUrl,
@@ -113,7 +127,7 @@ async function generateOne(
 
   const img = result.images?.[0];
   if (result.status !== "completed" || !img?.b64Data) {
-    throw new Error(`Falha na geração ${type}/${frame}/${ambient ?? "-"}: ${result.error ?? "sem imagem"}`);
+    throw new Error(`Falha na geração ${label}: ${result.error ?? "sem imagem"}`);
   }
 
   return {
@@ -151,7 +165,6 @@ export async function runForProduct(
     ENV.driveDestinationFolderId,
   );
 
-  // Subpastas
   const [hdFolder, lifestyleFolder, mockupFolder] = await Promise.all([
     googleDriveService.getOrCreateFolder(accessToken, "01_HD_Original", productFolder.id),
     googleDriveService.getOrCreateFolder(accessToken, "02_Lifestyle", productFolder.id),
@@ -163,7 +176,6 @@ export async function runForProduct(
   const originalMime = product.sourceDriveMimeType || "image/jpeg";
   const referenceDataUrl = `data:${originalMime};base64,${originalBuffer.toString("base64")}`;
 
-  // Salva o original SEM resize na pasta HD (uso interno: impressão / arquivo)
   const origExt = originalMime.includes("png") ? "png" : "jpg";
   await googleDriveService.uploadFile(
     accessToken,
@@ -173,38 +185,42 @@ export async function runForProduct(
     hdFolder.id,
   );
 
-  // Define a moldura uma vez — todas as 3 imagens usam a mesma
+  // Moldura única para todas as 3 imagens do produto
   const frame: FrameType = pickRandom(FRAMES);
-  const lifestyleAmbient: AmbientType = pickRandom(REGULAR_AMBIENTS);
 
-  // ETAPA 2 — Lifestyle (ambiente regular). Resize/compress antes do upload.
-  const lifeRaw = await generateOne("lifestyle", frame, lifestyleAmbient, referenceDataUrl);
+  // Sorteios independentes de cômodo + estilo
+  const regularRoom: RoomType = pickRandom(REGULAR_ROOMS);
+  const regularStyle: StyleType = pickRandom(STYLES);
+  const proStyle: StyleType = pickRandom(STYLES);
+
+  // ETAPA 2 — Lifestyle regular (cômodo + estilo sorteados)
+  const lifeRaw = await generateLifestyle(frame, regularRoom, regularStyle, referenceDataUrl);
   const life = await fitForEcommerce(lifeRaw.buffer);
   const lifeFile = await googleDriveService.uploadFile(
     accessToken,
-    `${product.sku}-lifestyle-${frame}-${lifestyleAmbient}.jpg`,
+    `${product.sku}-lifestyle-${frame}-${regularRoom}-${regularStyle}.jpg`,
     life.buffer,
     life.mimeType,
     lifestyleFolder.id,
   );
   await googleDriveService.makePublic(accessToken, lifeFile.id);
-  await onProgress?.(1, `lifestyle ${frame}/${lifestyleAmbient}`);
+  await onProgress?.(1, `lifestyle ${frame}/${regularRoom}/${regularStyle}`);
 
-  // ETAPA 3 — Lifestyle profissional (ambiente "corporate")
-  const proRaw = await generateOne("lifestyle", frame, "corporate", referenceDataUrl);
+  // ETAPA 3 — Lifestyle profissional (cômodo fixo = office + estilo sorteado)
+  const proRaw = await generateLifestyle(frame, "office", proStyle, referenceDataUrl);
   const pro = await fitForEcommerce(proRaw.buffer);
   const proFile = await googleDriveService.uploadFile(
     accessToken,
-    `${product.sku}-lifestyle-${frame}-corporate.jpg`,
+    `${product.sku}-lifestyle-${frame}-office-${proStyle}.jpg`,
     pro.buffer,
     pro.mimeType,
     lifestyleFolder.id,
   );
   await googleDriveService.makePublic(accessToken, proFile.id);
-  await onProgress?.(2, `lifestyle ${frame}/corporate`);
+  await onProgress?.(2, `lifestyle ${frame}/office/${proStyle}`);
 
   // ETAPA 4 — Mockup
-  const mockRaw = await generateOne("mockup", frame, undefined, referenceDataUrl);
+  const mockRaw = await generateMockup(frame, referenceDataUrl);
   const mock = await fitForEcommerce(mockRaw.buffer);
   const mockFile = await googleDriveService.uploadFile(
     accessToken,

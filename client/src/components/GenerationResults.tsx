@@ -9,7 +9,23 @@ interface GeneratedItem {
   url: string;
   type: 'lifestyle' | 'mockup' | 'video';
   frameType: 'light_wood' | 'dark_wood' | 'white' | 'black';
-  environmentType?: 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
+  roomType?:
+    | 'living_room'
+    | 'bedroom'
+    | 'kids_room'
+    | 'office'
+    | 'kitchen'
+    | 'bathroom'
+    | 'gourmet_area';
+  styleType?:
+    | 'scandinavian'
+    | 'japandi'
+    | 'minimalist'
+    | 'boho'
+    | 'classic'
+    | 'contemporary'
+    | 'industrial'
+    | 'rustic';
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error?: string;
 }
@@ -35,12 +51,25 @@ const frameLabels: Record<string, string> = {
   black: 'Preta',
 };
 
-const envLabels: Record<string, string> = {
-  scandinavian: 'Escandinavo',
-  modern: 'Moderno',
-  corporate: 'Corporativo',
+const roomLabels: Record<string, string> = {
+  living_room: 'Sala',
+  bedroom: 'Quarto',
+  kids_room: 'Quarto Infantil',
+  office: 'Escritório',
   kitchen: 'Cozinha / Área de Jantar',
-  kids: 'Infantil',
+  bathroom: 'Lavabo',
+  gourmet_area: 'Área Gourmet',
+};
+
+const styleLabels: Record<string, string> = {
+  scandinavian: 'Escandinavo',
+  japandi: 'Japandi',
+  minimalist: 'Minimalista',
+  boho: 'Boho',
+  classic: 'Clássico',
+  contemporary: 'Contemporâneo',
+  industrial: 'Industrial',
+  rustic: 'Rústico',
 };
 
 export default function GenerationResults({
@@ -175,9 +204,14 @@ export default function GenerationResults({
                 <span className="bg-muted px-2 py-1 rounded text-muted-foreground">
                   {frameLabels[item.frameType]}
                 </span>
-                {item.environmentType && (
+                {item.roomType && (
                   <span className="bg-muted px-2 py-1 rounded text-muted-foreground">
-                    {envLabels[item.environmentType]}
+                    {roomLabels[item.roomType]}
+                  </span>
+                )}
+                {item.styleType && (
+                  <span className="bg-muted px-2 py-1 rounded text-muted-foreground">
+                    {styleLabels[item.styleType]}
                   </span>
                 )}
               </div>

@@ -5,6 +5,34 @@ import { googleImagenService } from '../services/freepikService';
 import { googleVeoService } from '../services/googleVeoService';
 import { TRPCError } from '@trpc/server';
 
+const FRAME_TYPES = ['light_wood', 'dark_wood', 'white', 'black'] as const;
+const ROOM_TYPES = [
+  'living_room',
+  'bedroom',
+  'kids_room',
+  'office',
+  'kitchen',
+  'bathroom',
+  'gourmet_area',
+] as const;
+const STYLE_TYPES = [
+  'scandinavian',
+  'japandi',
+  'minimalist',
+  'boho',
+  'classic',
+  'contemporary',
+  'industrial',
+  'rustic',
+] as const;
+
+const FRAME_DESCRIPTIONS: Record<(typeof FRAME_TYPES)[number], string> = {
+  light_wood: 'natural light oak wood',
+  dark_wood: 'dark walnut wood with a rich espresso brown finish',
+  white: 'painted matte white with a clean smooth finish',
+  black: 'painted matte black with a clean smooth finish',
+};
+
 export const generationRouter = router({
   /**
    * Gera imagens e vídeos usando Google Imagen + Veo
@@ -13,39 +41,37 @@ export const generationRouter = router({
    */
   generateImages: publicProcedure
     .input(
-      z.object({
-        imageUrl: z.string().url('URL da imagem inválida'),
-        deliveryTypes: z.array(z.enum(['lifestyle', 'mockup', 'video'])).default(['lifestyle', 'mockup', 'video']),
-        frameType: z.enum(['light_wood', 'dark_wood', 'white', 'black']).default('light_wood'),
-        environmentType: z.enum(['scandinavian', 'modern', 'corporate', 'kitchen', 'kids']).optional(),
-      })
+      z
+        .object({
+          imageUrl: z.string().url('URL da imagem inválida'),
+          deliveryTypes: z
+            .array(z.enum(['lifestyle', 'mockup', 'video']))
+            .default(['lifestyle', 'mockup', 'video']),
+          frameType: z.enum(FRAME_TYPES).default('light_wood'),
+          roomType: z.enum(ROOM_TYPES).optional(),
+          styleType: z.enum(STYLE_TYPES).optional(),
+        })
+        .refine(
+          (data) => !data.deliveryTypes.includes('lifestyle') || (!!data.roomType && !!data.styleType),
+          { message: 'roomType e styleType são obrigatórios quando deliveryTypes inclui "lifestyle"' },
+        ),
     )
     .mutation(async ({ input }) => {
       try {
-        // Usa prompts pré-cadastrados do arquivo prompts_gerados.md
-        const allPrompts = promptAgentService.generatePromptVariations(input.deliveryTypes);
-
-        // Filtra baseado no tipo de moldura e ambiente selecionados
-        const filteredPrompts = allPrompts.filter((p) => {
-          if (p.frameType !== input.frameType) return false;
-          if (input.environmentType && p.type === 'lifestyle' && p.environmentType !== input.environmentType) return false;
-          return true;
+        const variations = promptAgentService.buildVariationsForRequest({
+          deliveryTypes: input.deliveryTypes,
+          frameType: input.frameType,
+          roomType: input.roomType,
+          styleType: input.styleType,
         });
 
         const generationResults = [];
 
-        for (const promptVariation of filteredPrompts) {
+        for (const promptVariation of variations) {
           try {
             if (promptVariation.type === 'video') {
               // PASSO 1: Gerar imagem estática do ambiente com Gemini (fidelidade à arte original)
-              const frameLabel = (
-                {
-                  light_wood: 'natural light oak wood',
-                  dark_wood: 'dark walnut wood with a rich espresso brown finish',
-                  white: 'painted matte white with a clean smooth finish',
-                  black: 'painted matte black with a clean smooth finish',
-                } as const
-              )[promptVariation.frameType];
+              const frameLabel = FRAME_DESCRIPTIONS[promptVariation.frameType];
               const stillPrompt = `Generate a photorealistic wide shot (16:9) of this artwork displayed in a ${frameLabel} frame, hanging centered on a white wall in a bright Scandinavian living room. Below the frame there is a beige linen sofa. Warm natural window light from the left. The artwork in the frame must be EXACTLY as provided — do not alter, reinterpret or stylize it in any way. Reproduce every color, line and detail with absolute fidelity. Editorial interior photography, cinematic.`;
 
               console.log('[Generation] Step 1: Generating still frame with Gemini (preserving artwork fidelity)...');
@@ -61,8 +87,8 @@ export const generationRouter = router({
               }
 
               // PASSO 2: Enviar imagem gerada ao Veo como primeiro frame
-              // Prompt focado APENAS no movimento — NÃO descrever a cena (o Veo já vê a imagem)
-              const veoMotionPrompt = 'Subtle gentle animation. Slow camera push forward toward the framed artwork on the wall. Very soft ambient light flickering. The framed artwork on the wall must remain completely static and unchanged throughout the entire video. Cinematic, smooth, editorial.';
+              const veoMotionPrompt =
+                'Subtle gentle animation. Slow camera push forward toward the framed artwork on the wall. Very soft ambient light flickering. The framed artwork on the wall must remain completely static and unchanged throughout the entire video. Cinematic, smooth, editorial.';
 
               console.log('[Generation] Step 2: Sending still frame to Veo (motion-only prompt)...');
 
@@ -75,12 +101,11 @@ export const generationRouter = router({
 
               let videoResult = result;
 
-              // Se está processando, faz polling até completar (máx 5 minutos)
               if (videoResult.status === 'processing' && videoResult.id) {
                 console.log(`[Generation] Video operation started: ${videoResult.id}. Polling...`);
-                const maxAttempts = 60; // 60 x 5s = 5 minutos
+                const maxAttempts = 60;
                 for (let attempt = 0; attempt < maxAttempts; attempt++) {
-                  await new Promise(resolve => setTimeout(resolve, 5000)); // espera 5s
+                  await new Promise((resolve) => setTimeout(resolve, 5000));
                   const status = await googleVeoService.checkGenerationStatus(videoResult.id);
                   console.log(`[Generation] Video poll #${attempt + 1}: status=${status.status}`);
                   if (status.status === 'completed' || status.status === 'failed') {
@@ -93,15 +118,18 @@ export const generationRouter = router({
               generationResults.push({
                 type: promptVariation.type,
                 frameType: promptVariation.frameType,
-                environmentType: promptVariation.environmentType,
+                roomType: promptVariation.roomType,
+                styleType: promptVariation.styleType,
                 prompt: promptVariation.prompt,
                 generationId: videoResult.id,
                 status: videoResult.status === 'processing' ? 'failed' : videoResult.status,
                 images: videoResult.videoUrl ? [{ url: videoResult.videoUrl, id: videoResult.id }] : [],
-                error: videoResult.status === 'processing' ? 'Vídeo demorou demais para gerar. Tente novamente.' : videoResult.error,
+                error:
+                  videoResult.status === 'processing'
+                    ? 'Vídeo demorou demais para gerar. Tente novamente.'
+                    : videoResult.error,
               });
             } else {
-              // Gera imagem usando Google Imagen 3
               const result = await googleImagenService.generateImages({
                 prompt: promptVariation.prompt,
                 referenceImageUrl: input.imageUrl,
@@ -112,7 +140,8 @@ export const generationRouter = router({
               generationResults.push({
                 type: promptVariation.type,
                 frameType: promptVariation.frameType,
-                environmentType: promptVariation.environmentType,
+                roomType: promptVariation.roomType,
+                styleType: promptVariation.styleType,
                 prompt: promptVariation.prompt,
                 generationId: result.id,
                 status: result.status,
@@ -125,7 +154,8 @@ export const generationRouter = router({
             generationResults.push({
               type: promptVariation.type,
               frameType: promptVariation.frameType,
-              environmentType: promptVariation.environmentType,
+              roomType: promptVariation.roomType,
+              styleType: promptVariation.styleType,
               prompt: promptVariation.prompt,
               generationId: '',
               status: 'failed',
@@ -156,7 +186,7 @@ export const generationRouter = router({
     .input(
       z.object({
         operationId: z.string(),
-      })
+      }),
     )
     .query(async ({ input }) => {
       try {

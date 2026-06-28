@@ -13,6 +13,23 @@ import GenerationResults from '@/components/GenerationResults';
 
 type DeliveryType = 'lifestyle' | 'mockup' | 'video';
 type FrameType = 'light_wood' | 'dark_wood' | 'white' | 'black';
+type RoomType =
+  | 'living_room'
+  | 'bedroom'
+  | 'kids_room'
+  | 'office'
+  | 'kitchen'
+  | 'bathroom'
+  | 'gourmet_area';
+type StyleType =
+  | 'scandinavian'
+  | 'japandi'
+  | 'minimalist'
+  | 'boho'
+  | 'classic'
+  | 'contemporary'
+  | 'industrial'
+  | 'rustic';
 
 const FRAME_FILE_LABEL: Record<FrameType, string> = {
   light_wood: 'amadeirado-claro',
@@ -20,14 +37,35 @@ const FRAME_FILE_LABEL: Record<FrameType, string> = {
   white: 'branca',
   black: 'preta',
 };
-type EnvironmentType = 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
+
+const ROOM_OPTIONS: ReadonlyArray<{ value: RoomType; label: string }> = [
+  { value: 'living_room', label: 'Sala' },
+  { value: 'bedroom', label: 'Quarto' },
+  { value: 'kids_room', label: 'Quarto Infantil' },
+  { value: 'office', label: 'Escritório' },
+  { value: 'kitchen', label: 'Cozinha / Área de Jantar' },
+  { value: 'bathroom', label: 'Lavabo' },
+  { value: 'gourmet_area', label: 'Área Gourmet' },
+];
+
+const STYLE_OPTIONS: ReadonlyArray<{ value: StyleType; label: string }> = [
+  { value: 'scandinavian', label: 'Escandinavo' },
+  { value: 'japandi', label: 'Japandi' },
+  { value: 'minimalist', label: 'Minimalista' },
+  { value: 'boho', label: 'Boho' },
+  { value: 'classic', label: 'Clássico' },
+  { value: 'contemporary', label: 'Contemporâneo' },
+  { value: 'industrial', label: 'Industrial' },
+  { value: 'rustic', label: 'Rústico' },
+];
 
 interface GeneratedItem {
   id: string;
   url: string;
   type: DeliveryType;
   frameType: FrameType;
-  environmentType?: EnvironmentType;
+  roomType?: RoomType;
+  styleType?: StyleType;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error?: string;
 }
@@ -38,7 +76,8 @@ export default function Home() {
   const [selectedImage, setSelectedImage] = useState<{ url: string; fileName: string } | undefined>();
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('lifestyle');
   const [frameType, setFrameType] = useState<FrameType>('light_wood');
-  const [environmentType, setEnvironmentType] = useState<EnvironmentType>('scandinavian');
+  const [roomType, setRoomType] = useState<RoomType>('living_room');
+  const [styleType, setStyleType] = useState<StyleType>('scandinavian');
   const [generatedItems, setGeneratedItems] = useState<GeneratedItem[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [folderDialog, setFolderDialog] = useState<{ open: boolean; item: GeneratedItem | null }>({ open: false, item: null });
@@ -65,7 +104,8 @@ export default function Home() {
         imageUrl: selectedImage.url,
         deliveryTypes: [deliveryType],
         frameType,
-        environmentType: deliveryType === 'lifestyle' ? environmentType : undefined,
+        roomType: deliveryType === 'lifestyle' ? roomType : undefined,
+        styleType: deliveryType === 'lifestyle' ? styleType : undefined,
       });
 
       const items: GeneratedItem[] = result.results.map((r, index) => ({
@@ -73,7 +113,8 @@ export default function Home() {
         url: r.images?.[0]?.url || '',
         type: r.type,
         frameType: r.frameType,
-        environmentType: r.environmentType,
+        roomType: r.roomType,
+        styleType: r.styleType,
         status: (r.status as any) || 'completed',
         error: r.error,
       }));
@@ -337,33 +378,39 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Estilo de Ambiente (só para Lifestyle) */}
+            {/* Ambiente (cômodo) — só para Lifestyle */}
             {deliveryType === 'lifestyle' && (
               <div className="space-y-3">
-                <label className="block text-sm font-semibold text-foreground">Estilo de Ambiente</label>
-                <div className="space-y-2">
-                  {[
-                    { value: 'scandinavian' as const, label: 'Escandinavo / Clean' },
-                    { value: 'modern' as const, label: 'Moderno / Contemporâneo' },
-                    { value: 'corporate' as const, label: 'Corporativo' },
-                    { value: 'kitchen' as const, label: 'Cozinha / Área de Jantar' },
-                    { value: 'kids' as const, label: 'Infantil' },
-                  ].map((option) => (
-                    <label key={option.value} className="flex items-center space-x-3 cursor-pointer group">
-                      <input
-                        type="radio"
-                        name="environment"
-                        value={option.value}
-                        checked={environmentType === option.value}
-                        onChange={(e) => setEnvironmentType(e.target.value as EnvironmentType)}
-                        className="w-4 h-4 accent-primary"
-                      />
-                      <span className="text-sm text-foreground group-hover:text-primary transition-colors">
-                        {option.label}
-                      </span>
-                    </label>
+                <label className="block text-sm font-semibold text-foreground">Ambiente (cômodo)</label>
+                <select
+                  value={roomType}
+                  onChange={(e) => setRoomType(e.target.value as RoomType)}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {ROOM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
-                </div>
+                </select>
+              </div>
+            )}
+
+            {/* Estilo de Decoração — só para Lifestyle */}
+            {deliveryType === 'lifestyle' && (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-foreground">Estilo de Decoração</label>
+                <select
+                  value={styleType}
+                  onChange={(e) => setStyleType(e.target.value as StyleType)}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {STYLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
           </div>

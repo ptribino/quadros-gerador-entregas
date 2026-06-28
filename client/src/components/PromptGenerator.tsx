@@ -7,7 +7,44 @@ import ImageSelector from './ImageSelector';
 
 type DeliveryType = 'lifestyle' | 'mockup' | 'video';
 type FrameType = 'light_wood' | 'dark_wood' | 'white' | 'black';
-type EnvironmentType = 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
+type RoomType =
+  | 'living_room'
+  | 'bedroom'
+  | 'kids_room'
+  | 'office'
+  | 'kitchen'
+  | 'bathroom'
+  | 'gourmet_area';
+type StyleType =
+  | 'scandinavian'
+  | 'japandi'
+  | 'minimalist'
+  | 'boho'
+  | 'classic'
+  | 'contemporary'
+  | 'industrial'
+  | 'rustic';
+
+const ROOM_OPTIONS: ReadonlyArray<{ value: RoomType; label: string }> = [
+  { value: 'living_room', label: 'Sala' },
+  { value: 'bedroom', label: 'Quarto' },
+  { value: 'kids_room', label: 'Quarto Infantil' },
+  { value: 'office', label: 'Escritório' },
+  { value: 'kitchen', label: 'Cozinha / Área de Jantar' },
+  { value: 'bathroom', label: 'Lavabo' },
+  { value: 'gourmet_area', label: 'Área Gourmet' },
+];
+
+const STYLE_OPTIONS: ReadonlyArray<{ value: StyleType; label: string }> = [
+  { value: 'scandinavian', label: 'Escandinavo' },
+  { value: 'japandi', label: 'Japandi' },
+  { value: 'minimalist', label: 'Minimalista' },
+  { value: 'boho', label: 'Boho' },
+  { value: 'classic', label: 'Clássico' },
+  { value: 'contemporary', label: 'Contemporâneo' },
+  { value: 'industrial', label: 'Industrial' },
+  { value: 'rustic', label: 'Rústico' },
+];
 
 interface PromptGeneratorProps {
   kitSize?: number;
@@ -16,7 +53,8 @@ interface PromptGeneratorProps {
 export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('lifestyle');
   const [frameType, setFrameType] = useState<FrameType>('light_wood');
-  const [environmentType, setEnvironmentType] = useState<EnvironmentType>('scandinavian');
+  const [roomType, setRoomType] = useState<RoomType>('living_room');
+  const [styleType, setStyleType] = useState<StyleType>('scandinavian');
   const [isKit, setIsKit] = useState(false);
   const [kitQuantity, setKitQuantity] = useState(kitSize);
   const [copied, setCopied] = useState(false);
@@ -29,39 +67,82 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
     black: 'painted matte black with a clean smooth finish',
   };
 
-  const environmentDescriptions: Record<EnvironmentType, string> = {
-    scandinavian: 'Scandinavian living room, white plaster wall, light oak floating shelf below, ceramic vase with dried pampas grass, linen sofa in warm white, warm whites and sage green palette, eye-level wide shot, minimalist decor, not overly staged.',
-    modern: 'Modern contemporary apartment living room, white walls, light concrete floor, low-profile modular sofa in light gray, indoor fiddle leaf fig plant, large window with soft diffused light, cool neutral palette with natural wood accents, wide angle eye-level shot, upscale residential feel, not a showroom.',
-    corporate: 'Upscale corporate office interior, executive meeting room or private office, white or light gray painted wall, sleek office desk or conference table visible in the foreground, ergonomic office chairs, subtle corporate decor — potted plant, stacked books, laptop — large window with soft natural light filtering through blinds, polished concrete or neutral carpet floor, professional and elegant atmosphere, gender-neutral environment.',
-    kitchen: 'Modern Brazilian kitchen and dining area, light oak wooden dining table with four upholstered chairs in warm beige linen, ceramic tableware and a fresh fruit bowl on the table, white shaker-style cabinets with brushed brass handles in the background, light quartz or marble countertop, single black pendant light hanging above the table, white painted wall, terracotta or light wood floor, small herb pots on the windowsill, warm natural daylight from a side window, cozy lived-in family atmosphere, not staged, not a showroom.',
-    kids: "Bright cheerful children's bedroom, soft pastel palette of dusty pink, mint green and warm cream, low children's bed with crisp white linens and a few plush toys, light wood floor with a small geometric play rug, a low wooden bookshelf with picture books and stuffed animals, sheer white curtains diffusing soft natural daylight, simple wooden toys arranged neatly, indoor potted plant, playful and magical but tasteful and uncluttered childhood atmosphere, real lived-in family home, not a showroom.",
+  const roomDescriptions: Record<RoomType, string> = {
+    living_room:
+      'a residential living room with a comfortable sofa, a coffee table, an area rug, a side lamp, and a large window providing natural daylight',
+    bedroom:
+      'a primary bedroom with a queen bed dressed in crisp linens, two bedside tables with reading lamps, a small bench at the foot of the bed, and sheer curtains diffusing soft daylight',
+    kids_room:
+      "a children's bedroom with a low single bed dressed in cheerful linens, a few plush toys, a small bookshelf with picture books, a play rug, and sheer curtains diffusing soft daylight",
+    office:
+      'a home or executive office with a clean wooden desk, an ergonomic chair, organized shelves with books and a small potted plant, and a large window with soft natural light filtering through blinds',
+    kitchen:
+      'an open kitchen and dining area with a wooden dining table and four chairs, ceramic tableware, a fresh fruit bowl on the table, kitchen cabinets visible in the background, a pendant light above the table, and warm natural daylight from a side window',
+    bathroom:
+      'a residential powder room (lavabo) with a stone or wooden vanity, an undermount basin, a wall-mounted decorative mirror, neatly folded hand towels, a small potted plant, and a warm overhead light',
+    gourmet_area:
+      'an outdoor covered gourmet area with a built-in grill or pizza oven, a long dining table with chairs, a ceiling fan above, potted plants along the perimeter, and warm afternoon light',
   };
 
-  const basePrompts = {
-    lifestyle: `Use the uploaded image as the artwork. Do not alter, reinterpret or stylize the artwork in any way — reproduce it exactly as provided. Place it as a framed print hanging on a wall. The frame should be thin and [MOLDURA: ${frameLabel[frameType]}]. Show the artwork clearly, with correct proportions and full visibility. Soft natural window light from the left. Lived-in authentic home feel — not a photoshoot, not a showroom. Editorial interior photography, 35mm lens, shallow depth of field, photorealistic. Aspect ratio 4:5.`,
-    mockup: `Now create a clean product mockup of this exact artwork — do not alter or reinterpret the image. Place it as a framed print on a plain white or very light gray wall. Frame: thin [MOLDURA: ${frameLabel[frameType]}] with white mat border. Straight frontal view, perfectly centered. Soft uniform studio lighting, no harsh shadows, no reflections on glass. Minimalist product photography style, e-commerce background. Aspect ratio 4:5.`,
-    video: `Use the uploaded image as the scene reference. The framed artwork must remain identical to the reference image throughout the entire video — same colors, composition and details in every frame. Do not alter the artwork at any point. Opening scene: young Brazilian woman, dark hair, 25–35 years old, casual linen outfit in neutral ivory tones, natural makeup, hanging the framed artwork shown in the reference image on a white wall, arms raised, satisfied expression, warm natural window light from left, candid authentic lifestyle moment, real home feel, not a photoshoot. Then camera slowly pulls back and pans to show the framed artwork directly from the front, full frame, centered on the wall, artwork clearly visible and identical to the reference image, no person in frame, soft even lighting, clean editorial product shot. Style: photorealistic, cinematic, editorial home decor, smooth camera motion, warm natural light throughout. Duration: 8 seconds. Aspect ratio: 16:9.`,
+  const styleDescriptions: Record<StyleType, string> = {
+    scandinavian:
+      'Scandinavian aesthetic: white plaster walls, light oak or pale pine flooring, raw linen and wool textiles in warm whites, a neutral palette accented with sage green and dried pampas, minimalist decor, lived-in but uncluttered',
+    japandi:
+      'Japandi aesthetic: warm muted palette of taupe, warm white and soft black, low-profile wooden furniture, raw linen and undyed cotton, a single bonsai or ikebana arrangement, wabi-sabi imperfection, restrained zen calm',
+    minimalist:
+      'Minimalist aesthetic: monochrome whites and soft cool grays, clean architectural lines, almost no decor, pale wood or polished concrete floor, abundant negative space, gallery-like serenity',
+    boho:
+      'Boho aesthetic: warm earthy palette of terracotta, rust, mustard and cream, rattan and macramé accents, layered patterned rugs, hanging plants and dried flowers, vintage textiles, lived-in eclectic mix',
+    classic:
+      'Classic aesthetic: refined cream and beige palette, traditional crown moldings, dark hardwood floors, upholstered furniture in tufted velvet, brass accents, framed art arranged with formal symmetry',
+    contemporary:
+      'Contemporary aesthetic: cool neutral palette with white walls, light concrete or pale wood floor, low-profile modular furniture in light gray, a fiddle leaf fig in a matte ceramic planter, soft diffused window light, upscale residential feel',
+    industrial:
+      'Industrial aesthetic: exposed brick walls and visible black steel structural beams, polished concrete floor, matte black metal fixtures, vintage Edison bulbs, leather and reclaimed wood furniture, raw and unpolished',
+    rustic:
+      'Rustic aesthetic: warm wood-clad walls or visible ceiling beams, woven wool throws, terracotta and amber palette, a vintage iron lantern, handcrafted ceramics, cozy farmhouse coziness',
   };
+
+  const artworkFidelity =
+    'CRITICAL — ABSOLUTE FIDELITY TO THE UPLOADED ARTWORK: The uploaded image is the artwork that will be placed inside the frame. You MUST reproduce it EXACTLY as provided — identical composition, identical colors, identical lines, identical details, identical proportions. Do NOT alter, reinterpret, stylize, recolor, recrop, simplify, redraw or change the artwork in ANY way. The artwork inside the frame must look pixel-faithful to the reference image.';
 
   const generatedPrompt = useMemo(() => {
-    let prompt = basePrompts[deliveryType];
+    let prompt: string;
 
     if (deliveryType === 'lifestyle') {
-      prompt = `${environmentDescriptions[environmentType]} ` + prompt;
+      prompt = [
+        `${styleDescriptions[styleType]} applied to ${roomDescriptions[roomType]}.`,
+        `Editorial interior photography, eye-level wide shot, 35mm lens, shallow depth of field, photorealistic. Lived-in authentic feel — not a photoshoot, not a showroom.`,
+        `Place the framed print prominently on the main wall of the scene, hung at appropriate eye-level height for the room.`,
+        `Frame: thin, ${frameLabel[frameType]}.`,
+        artworkFidelity,
+        `Aspect ratio 4:5.`,
+      ].join(' ');
+    } else if (deliveryType === 'mockup') {
+      prompt = [
+        `Clean e-commerce product mockup. Place the framed print on a plain white or very light gray wall. Frame: thin ${frameLabel[frameType]} with white mat border. Straight frontal view, perfectly centered. Soft uniform studio lighting, no harsh shadows, no reflections on glass. Minimalist product photography style.`,
+        artworkFidelity,
+        `Aspect ratio 4:5.`,
+      ].join(' ');
+    } else {
+      prompt = [
+        `Use the uploaded image as the scene reference.`,
+        artworkFidelity,
+        `The framed artwork must remain identical to the reference image throughout the entire video. Opening scene: young Brazilian woman, dark hair, 25–35 years old, casual linen outfit in neutral ivory tones, hanging the framed artwork on a white wall, warm natural window light from left, candid authentic lifestyle moment. Then camera slowly pulls back to show the framed artwork directly from the front, full frame, centered on the wall, no person in frame, soft even lighting, clean editorial product shot.`,
+        `Frame: thin ${frameLabel[frameType]}. Style: photorealistic, cinematic, editorial home decor, smooth camera motion. Duration: 8 seconds. Aspect ratio: 16:9.`,
+      ].join(' ');
     }
 
     if (isKit && kitQuantity > 1) {
-      const kitInstruction = deliveryType === 'video'
-        ? `This is a set of ${kitQuantity} artworks. Display all ${kitQuantity} framed prints together as a cohesive gallery wall arrangement, each artwork reproduced exactly as uploaded, maintaining correct individual proportions and consistent spacing between frames.`
-        : deliveryType === 'mockup'
-        ? `Display all ${kitQuantity} framed prints side by side, frontal view, evenly spaced, each artwork identical to the uploaded references, clean white background.`
-        : `This is a set of ${kitQuantity} artworks. Display all ${kitQuantity} framed prints together as a cohesive gallery wall arrangement, each artwork reproduced exactly as uploaded, maintaining correct individual proportions and consistent spacing between frames.`;
-      
+      const kitInstruction =
+        deliveryType === 'mockup'
+          ? `Display all ${kitQuantity} framed prints side by side, frontal view, evenly spaced, each artwork identical to the uploaded references, clean white background.`
+          : `This is a set of ${kitQuantity} artworks. Display all ${kitQuantity} framed prints together as a cohesive gallery wall arrangement, each artwork reproduced exactly as uploaded, maintaining correct individual proportions and consistent spacing between frames.`;
       prompt += ` ${kitInstruction}`;
     }
 
     return prompt;
-  }, [deliveryType, frameType, environmentType, isKit, kitQuantity]);
+  }, [deliveryType, frameType, roomType, styleType, isKit, kitQuantity]);
 
   const handleCopy = async () => {
     try {
@@ -142,32 +223,38 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
             </div>
           </div>
 
-          {/* Environment Type (only for lifestyle) */}
+          {/* Ambiente (cômodo) + Estilo de Decoração — só para lifestyle */}
           {deliveryType === 'lifestyle' && (
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-foreground">Estilo de Ambiente</label>
-              <div className="space-y-2">
-                {[
-                  { value: 'scandinavian' as const, label: 'Escandinavo / Clean' },
-                  { value: 'modern' as const, label: 'Moderno / Contemporâneo' },
-                  { value: 'corporate' as const, label: 'Corporativo' },
-                  { value: 'kitchen' as const, label: 'Cozinha / Área de Jantar' },
-                  { value: 'kids' as const, label: 'Infantil' },
-                ].map((option) => (
-                  <label key={option.value} className="flex items-center space-x-3 cursor-pointer group">
-                    <input
-                      type="radio"
-                      name="environment"
-                      value={option.value}
-                      checked={environmentType === option.value}
-                      onChange={(e) => setEnvironmentType(e.target.value as EnvironmentType)}
-                      className="w-4 h-4 accent-primary"
-                    />
-                    <span className="text-sm text-foreground group-hover:text-primary transition-colors">{option.label}</span>
-                  </label>
-                ))}
+            <>
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-foreground">Ambiente (cômodo)</label>
+                <select
+                  value={roomType}
+                  onChange={(e) => setRoomType(e.target.value as RoomType)}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {ROOM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-foreground">Estilo de Decoração</label>
+                <select
+                  value={styleType}
+                  onChange={(e) => setStyleType(e.target.value as StyleType)}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {STYLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
           )}
 
           {/* Kit Options */}
