@@ -378,39 +378,37 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Ambiente (cômodo) — só para Lifestyle */}
+            {/* Ambiente + Estilo (empilhados na coluna da direita) — só para Lifestyle */}
             {deliveryType === 'lifestyle' && (
-              <div className="space-y-3">
-                <label className="block text-sm font-semibold text-foreground">Ambiente (cômodo)</label>
-                <select
-                  value={roomType}
-                  onChange={(e) => setRoomType(e.target.value as RoomType)}
-                  className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {ROOM_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Estilo de Decoração — só para Lifestyle */}
-            {deliveryType === 'lifestyle' && (
-              <div className="space-y-3">
-                <label className="block text-sm font-semibold text-foreground">Estilo de Decoração</label>
-                <select
-                  value={styleType}
-                  onChange={(e) => setStyleType(e.target.value as StyleType)}
-                  className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {STYLE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <label className="block text-sm font-semibold text-foreground">Ambiente (cômodo)</label>
+                  <select
+                    value={roomType}
+                    onChange={(e) => setRoomType(e.target.value as RoomType)}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    {ROOM_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-3">
+                  <label className="block text-sm font-semibold text-foreground">Estilo de Decoração</label>
+                  <select
+                    value={styleType}
+                    onChange={(e) => setStyleType(e.target.value as StyleType)}
+                    className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    {STYLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
           </div>
