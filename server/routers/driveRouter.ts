@@ -42,7 +42,7 @@ export const driveRouter = router({
         imageUrl: z.string().min(1, 'URL da imagem é obrigatória'),
         fileName: z.string().min(1, 'Nome do arquivo é obrigatório'),
         type: z.enum(['lifestyle', 'mockup', 'video']),
-        frameType: z.enum(['pine', 'aluminum']),
+        frameType: z.enum(['light_wood', 'dark_wood', 'white', 'black']),
         folderId: z.string().optional(),
       })
     )

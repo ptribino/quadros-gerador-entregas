@@ -7,12 +7,15 @@ import { trpc } from '@/lib/trpc';
 import ImageSelector from '@/components/ImageSelector';
 import GenerationResults from '@/components/GenerationResults';
 
+type FrameType = 'light_wood' | 'dark_wood' | 'white' | 'black';
+type EnvironmentType = 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
+
 interface GeneratedImage {
   id: string;
   url: string;
   type: 'lifestyle' | 'mockup' | 'video';
-  frameType: 'pine' | 'aluminum';
-  environmentType?: 'scandinavian' | 'modern';
+  frameType: FrameType;
+  environmentType?: EnvironmentType;
   prompt: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error?: string;
@@ -22,8 +25,8 @@ export default function GenerationPage() {
   const [selectedImage, setSelectedImage] = useState<{ url: string; fileName: string } | undefined>();
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [frameType, setFrameType] = useState<'pine' | 'aluminum'>('pine');
-  const [environmentType, setEnvironmentType] = useState<'scandinavian' | 'modern'>('scandinavian');
+  const [frameType, setFrameType] = useState<FrameType>('light_wood');
+  const [environmentType, setEnvironmentType] = useState<EnvironmentType>('scandinavian');
 
   const generateMutation = trpc.generation.generateImages.useMutation();
   const saveImageMutation = trpc.drive.saveImage.useMutation();
@@ -122,8 +125,10 @@ export default function GenerationPage() {
                 <label className="block text-sm font-semibold text-foreground">Tipo de Moldura</label>
                 <div className="space-y-2">
                   {[
-                    { value: 'pine' as const, label: 'Madeira de Pinho Natural' },
-                    { value: 'aluminum' as const, label: 'Alumínio Preto Fosco' },
+                    { value: 'light_wood' as const, label: 'Amadeirado Claro' },
+                    { value: 'dark_wood' as const, label: 'Amadeirado Escuro' },
+                    { value: 'white' as const, label: 'Branca' },
+                    { value: 'black' as const, label: 'Preta' },
                   ].map((option) => (
                     <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
                       <input
@@ -131,7 +136,7 @@ export default function GenerationPage() {
                         name="frame"
                         value={option.value}
                         checked={frameType === option.value}
-                        onChange={(e) => setFrameType(e.target.value as 'pine' | 'aluminum')}
+                        onChange={(e) => setFrameType(e.target.value as FrameType)}
                         className="w-4 h-4 accent-primary"
                       />
                       <span className="text-sm text-foreground">{option.label}</span>
@@ -147,8 +152,11 @@ export default function GenerationPage() {
                 </label>
                 <div className="space-y-2">
                   {[
-                    { value: 'scandinavian' as const, label: 'Escandinavo/Clean' },
-                    { value: 'modern' as const, label: 'Moderno/Contemporâneo' },
+                    { value: 'scandinavian' as const, label: 'Escandinavo / Clean' },
+                    { value: 'modern' as const, label: 'Moderno / Contemporâneo' },
+                    { value: 'corporate' as const, label: 'Corporativo' },
+                    { value: 'kitchen' as const, label: 'Cozinha / Área de Jantar' },
+                    { value: 'kids' as const, label: 'Infantil' },
                   ].map((option) => (
                     <label key={option.value} className="flex items-center space-x-3 cursor-pointer">
                       <input
@@ -157,7 +165,7 @@ export default function GenerationPage() {
                         value={option.value}
                         checked={environmentType === option.value}
                         onChange={(e) =>
-                          setEnvironmentType(e.target.value as 'scandinavian' | 'modern')
+                          setEnvironmentType(e.target.value as EnvironmentType)
                         }
                         className="w-4 h-4 accent-primary"
                       />

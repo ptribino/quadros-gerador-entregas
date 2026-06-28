@@ -12,7 +12,14 @@ import ImageSelector from '@/components/ImageSelector';
 import GenerationResults from '@/components/GenerationResults';
 
 type DeliveryType = 'lifestyle' | 'mockup' | 'video';
-type FrameType = 'pine' | 'aluminum';
+type FrameType = 'light_wood' | 'dark_wood' | 'white' | 'black';
+
+const FRAME_FILE_LABEL: Record<FrameType, string> = {
+  light_wood: 'amadeirado-claro',
+  dark_wood: 'amadeirado-escuro',
+  white: 'branca',
+  black: 'preta',
+};
 type EnvironmentType = 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
 
 interface GeneratedItem {
@@ -30,7 +37,7 @@ export default function Home() {
 
   const [selectedImage, setSelectedImage] = useState<{ url: string; fileName: string } | undefined>();
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('lifestyle');
-  const [frameType, setFrameType] = useState<FrameType>('pine');
+  const [frameType, setFrameType] = useState<FrameType>('light_wood');
   const [environmentType, setEnvironmentType] = useState<EnvironmentType>('scandinavian');
   const [generatedItems, setGeneratedItems] = useState<GeneratedItem[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -127,7 +134,7 @@ export default function Home() {
 
     try {
       const typeLabel = item.type === 'lifestyle' ? 'lifestyle' : item.type === 'mockup' ? 'mockup' : 'video';
-      const frameLabel = item.frameType === 'pine' ? 'pinho' : 'aluminio';
+      const frameLabel = FRAME_FILE_LABEL[item.frameType];
       const ext = item.type === 'video' ? 'mp4' : 'png';
       const fileName = `${typeLabel}-${frameLabel}-${Date.now()}.${ext}`;
 
@@ -176,7 +183,7 @@ export default function Home() {
 
   const handleDownload = (item: GeneratedItem) => {
     const typeLabel = item.type === 'lifestyle' ? 'lifestyle' : item.type === 'mockup' ? 'mockup' : 'video';
-    const frameLabel = item.frameType === 'pine' ? 'pinho' : 'aluminio';
+    const frameLabel = FRAME_FILE_LABEL[item.frameType];
     const ext = item.type === 'video' ? 'mp4' : 'png';
 
     const link = document.createElement('a');
@@ -308,8 +315,10 @@ export default function Home() {
               <label className="block text-sm font-semibold text-foreground">Tipo de Moldura</label>
               <div className="space-y-2">
                 {[
-                  { value: 'pine' as const, label: 'Madeira de Pinho Natural' },
-                  { value: 'aluminum' as const, label: 'Alumínio Preto Fosco' },
+                  { value: 'light_wood' as const, label: 'Amadeirado Claro' },
+                  { value: 'dark_wood' as const, label: 'Amadeirado Escuro' },
+                  { value: 'white' as const, label: 'Branca' },
+                  { value: 'black' as const, label: 'Preta' },
                 ].map((option) => (
                   <label key={option.value} className="flex items-center space-x-3 cursor-pointer group">
                     <input

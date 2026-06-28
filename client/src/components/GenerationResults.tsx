@@ -8,8 +8,8 @@ interface GeneratedItem {
   id: string;
   url: string;
   type: 'lifestyle' | 'mockup' | 'video';
-  frameType: 'pine' | 'aluminum';
-  environmentType?: 'scandinavian' | 'modern';
+  frameType: 'light_wood' | 'dark_wood' | 'white' | 'black';
+  environmentType?: 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error?: string;
 }
@@ -29,13 +29,18 @@ const typeLabels: Record<string, string> = {
 };
 
 const frameLabels: Record<string, string> = {
-  pine: 'Pinho Natural',
-  aluminum: 'Alumínio Preto Fosco',
+  light_wood: 'Amadeirado Claro',
+  dark_wood: 'Amadeirado Escuro',
+  white: 'Branca',
+  black: 'Preta',
 };
 
 const envLabels: Record<string, string> = {
   scandinavian: 'Escandinavo',
   modern: 'Moderno',
+  corporate: 'Corporativo',
+  kitchen: 'Cozinha / Área de Jantar',
+  kids: 'Infantil',
 };
 
 export default function GenerationResults({

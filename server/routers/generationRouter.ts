@@ -16,7 +16,7 @@ export const generationRouter = router({
       z.object({
         imageUrl: z.string().url('URL da imagem inválida'),
         deliveryTypes: z.array(z.enum(['lifestyle', 'mockup', 'video'])).default(['lifestyle', 'mockup', 'video']),
-        frameType: z.enum(['pine', 'aluminum']).default('pine'),
+        frameType: z.enum(['light_wood', 'dark_wood', 'white', 'black']).default('light_wood'),
         environmentType: z.enum(['scandinavian', 'modern', 'corporate', 'kitchen', 'kids']).optional(),
       })
     )
@@ -38,7 +38,14 @@ export const generationRouter = router({
           try {
             if (promptVariation.type === 'video') {
               // PASSO 1: Gerar imagem estática do ambiente com Gemini (fidelidade à arte original)
-              const frameLabel = promptVariation.frameType === 'pine' ? 'natural pine wood' : 'matte black aluminum';
+              const frameLabel = (
+                {
+                  light_wood: 'natural light oak wood',
+                  dark_wood: 'dark walnut wood with a rich espresso brown finish',
+                  white: 'painted matte white with a clean smooth finish',
+                  black: 'painted matte black with a clean smooth finish',
+                } as const
+              )[promptVariation.frameType];
               const stillPrompt = `Generate a photorealistic wide shot (16:9) of this artwork displayed in a ${frameLabel} frame, hanging centered on a white wall in a bright Scandinavian living room. Below the frame there is a beige linen sofa. Warm natural window light from the left. The artwork in the frame must be EXACTLY as provided — do not alter, reinterpret or stylize it in any way. Reproduce every color, line and detail with absolute fidelity. Editorial interior photography, cinematic.`;
 
               console.log('[Generation] Step 1: Generating still frame with Gemini (preserving artwork fidelity)...');

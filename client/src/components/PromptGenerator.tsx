@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import ImageSelector from './ImageSelector';
 
 type DeliveryType = 'lifestyle' | 'mockup' | 'video';
-type FrameType = 'pine' | 'aluminum';
+type FrameType = 'light_wood' | 'dark_wood' | 'white' | 'black';
 type EnvironmentType = 'scandinavian' | 'modern' | 'corporate' | 'kitchen' | 'kids';
 
 interface PromptGeneratorProps {
@@ -15,16 +15,18 @@ interface PromptGeneratorProps {
 
 export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('lifestyle');
-  const [frameType, setFrameType] = useState<FrameType>('pine');
+  const [frameType, setFrameType] = useState<FrameType>('light_wood');
   const [environmentType, setEnvironmentType] = useState<EnvironmentType>('scandinavian');
   const [isKit, setIsKit] = useState(false);
   const [kitQuantity, setKitQuantity] = useState(kitSize);
   const [copied, setCopied] = useState(false);
   const [selectedImage, setSelectedImage] = useState<{ url: string; fileName: string } | undefined>();
 
-  const frameLabel = {
-    pine: 'natural pine wood',
-    aluminum: 'matte black aluminum',
+  const frameLabel: Record<FrameType, string> = {
+    light_wood: 'natural light oak wood',
+    dark_wood: 'dark walnut wood with a rich espresso brown finish',
+    white: 'painted matte white with a clean smooth finish',
+    black: 'painted matte black with a clean smooth finish',
   };
 
   const environmentDescriptions: Record<EnvironmentType, string> = {
@@ -120,8 +122,10 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
             <label className="block text-sm font-semibold text-foreground">Tipo de Moldura</label>
             <div className="space-y-2">
               {[
-                { value: 'pine' as const, label: 'Madeira de Pinho Natural' },
-                { value: 'aluminum' as const, label: 'Alumínio Preto Fosco' },
+                { value: 'light_wood' as const, label: 'Amadeirado Claro' },
+                { value: 'dark_wood' as const, label: 'Amadeirado Escuro' },
+                { value: 'white' as const, label: 'Branca' },
+                { value: 'black' as const, label: 'Preta' },
               ].map((option) => (
                 <label key={option.value} className="flex items-center space-x-3 cursor-pointer group">
                   <input

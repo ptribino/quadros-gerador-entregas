@@ -15,8 +15,8 @@ import { googleDriveService } from "./googleDriveService";
 import { googleImagenService } from "./freepikService";
 import { promptAgentService } from "./promptAgentService";
 
-export type FrameType = "pine" | "aluminum";
-export type AmbientType = "scandinavian" | "modern" | "corporate";
+export type FrameType = "light_wood" | "dark_wood" | "white" | "black";
+export type AmbientType = "scandinavian" | "modern" | "corporate" | "kitchen" | "kids";
 
 export interface PipelineDeps {
   /** Token Google OAuth do usuário dono do produto. */
@@ -42,8 +42,8 @@ function pickRandom<T>(list: readonly T[]): T {
   return list[Math.floor(Math.random() * list.length)]!;
 }
 
-const FRAMES: readonly FrameType[] = ["pine", "aluminum"];
-const REGULAR_AMBIENTS: readonly AmbientType[] = ["scandinavian", "modern"];
+const FRAMES: readonly FrameType[] = ["light_wood", "dark_wood", "white", "black"];
+const REGULAR_AMBIENTS: readonly AmbientType[] = ["scandinavian", "modern", "kitchen", "kids"];
 
 /**
  * Sanitiza o nome do produto para virar nome de pasta no Drive.
