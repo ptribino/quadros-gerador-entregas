@@ -29,6 +29,8 @@ export interface PipelineProduct {
   nome: string;
   sourceDriveFileId: string | null;
   sourceDriveMimeType?: string;
+  /** code3 da categoria (ex: "INF", "BBD"). Usado pra escolher cômodos compatíveis. */
+  categoryCode3?: string | null;
 }
 
 export interface PipelineResult {
@@ -43,16 +45,37 @@ function pickRandom<T>(list: readonly T[]): T {
 }
 
 /**
- * Cômodos elegíveis para a lifestyle "regular" do catálogo automatizado.
- * Excluímos `office` (esse é forçado na lifestyle profissional) e ambientes
- * "molhados" (bathroom, gourmet_area) que costumam render quadros mal.
+ * Cômodos "universais" — cabem qualquer arte temática genérica (paisagens,
+ * abstratos, animais, frases, etc.). Excluímos kids_room (só pra arte
+ * infantil), bathroom (renderiza mal) e gourmet_area (nicho de bebidas).
  */
-const REGULAR_ROOMS: readonly RoomType[] = [
+const UNIVERSAL_ROOMS: readonly RoomType[] = [
   "living_room",
   "bedroom",
-  "kids_room",
+  "office",
   "kitchen",
 ];
+
+/**
+ * Mapa categoria (code3) → cômodos elegíveis para a geração de lifestyle.
+ * Categorias temáticas não listadas caem em UNIVERSAL_ROOMS.
+ *
+ * Confirmado com Priscila em 2026-06-28. Ajustar aqui se a estratégia mudar.
+ */
+const CATEGORY_ROOM_AFFINITY: Record<string, readonly RoomType[]> = {
+  INF: ["kids_room"],                                       // Tema Infantil
+  BBD: ["kitchen", "gourmet_area"],                         // Bebidas e Drinks
+  WIN: ["kitchen", "gourmet_area"],                         // Wine and Red
+  VEI: ["office", "bedroom"],                               // Veículos Diversos
+  MUF: ["bedroom", "living_room", "bathroom"],              // Mulheres Floridas
+  GLX: ["bedroom", "kids_room", "office"],                  // Galáxias e Planetas
+  FLO: ["living_room", "bedroom", "bathroom", "kitchen"],   // Flores e Plantas
+};
+
+function roomsForCategory(code3: string | null | undefined): readonly RoomType[] {
+  if (!code3) return UNIVERSAL_ROOMS;
+  return CATEGORY_ROOM_AFFINITY[code3] ?? UNIVERSAL_ROOMS;
+}
 
 /**
  * Sanitiza o nome do produto para virar nome de pasta no Drive.
@@ -188,12 +211,18 @@ export async function runForProduct(
   // Moldura única para todas as 3 imagens do produto
   const frame: FrameType = pickRandom(FRAMES);
 
-  // Sorteios independentes de cômodo + estilo
-  const regularRoom: RoomType = pickRandom(REGULAR_ROOMS);
+  // Cômodos elegíveis dependem da categoria do produto (ex: INF → só kids_room).
+  const eligibleRooms = roomsForCategory(product.categoryCode3);
+
+  // Sorteios independentes pra cada lifestyle. Se a categoria tem só 1 cômodo
+  // elegível (ex: INF), os dois lifestyles caem no mesmo cômodo — o estilo
+  // distingue (e isso é OK: dois ângulos do mesmo cômodo com estéticas diferentes).
+  const regularRoom: RoomType = pickRandom(eligibleRooms);
+  const proRoom: RoomType = pickRandom(eligibleRooms);
   const regularStyle: StyleType = pickRandom(STYLES);
   const proStyle: StyleType = pickRandom(STYLES);
 
-  // ETAPA 2 — Lifestyle regular (cômodo + estilo sorteados)
+  // ETAPA 2 — Lifestyle "regular"
   const lifeRaw = await generateLifestyle(frame, regularRoom, regularStyle, referenceDataUrl);
   const life = await fitForEcommerce(lifeRaw.buffer);
   const lifeFile = await googleDriveService.uploadFile(
@@ -206,18 +235,18 @@ export async function runForProduct(
   await googleDriveService.makePublic(accessToken, lifeFile.id);
   await onProgress?.(1, `lifestyle ${frame}/${regularRoom}/${regularStyle}`);
 
-  // ETAPA 3 — Lifestyle profissional (cômodo fixo = office + estilo sorteado)
-  const proRaw = await generateLifestyle(frame, "office", proStyle, referenceDataUrl);
+  // ETAPA 3 — Segunda lifestyle (mesmo pool de cômodos, sorteio independente)
+  const proRaw = await generateLifestyle(frame, proRoom, proStyle, referenceDataUrl);
   const pro = await fitForEcommerce(proRaw.buffer);
   const proFile = await googleDriveService.uploadFile(
     accessToken,
-    `${product.sku}-lifestyle-${frame}-office-${proStyle}.jpg`,
+    `${product.sku}-lifestyle-${frame}-${proRoom}-${proStyle}.jpg`,
     pro.buffer,
     pro.mimeType,
     lifestyleFolder.id,
   );
   await googleDriveService.makePublic(accessToken, proFile.id);
-  await onProgress?.(2, `lifestyle ${frame}/office/${proStyle}`);
+  await onProgress?.(2, `lifestyle ${frame}/${proRoom}/${proStyle}`);
 
   // ETAPA 4 — Mockup
   const mockRaw = await generateMockup(frame, referenceDataUrl);

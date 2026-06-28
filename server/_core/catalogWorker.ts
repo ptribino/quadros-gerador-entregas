@@ -42,6 +42,15 @@ async function getOpenIdByUserId(p: mysql.Pool, userId: number): Promise<string 
   return rows?.[0]?.openId ?? null;
 }
 
+async function getCategoryCode3(p: mysql.Pool, categoryCodeId: number | null): Promise<string | null> {
+  if (!categoryCodeId) return null;
+  const [rows]: any = await p.query(
+    "SELECT code3 FROM category_codes WHERE id = ? LIMIT 1",
+    [categoryCodeId],
+  );
+  return rows?.[0]?.code3 ?? null;
+}
+
 async function processOne(): Promise<boolean> {
   const p = getPool();
   if (!p) return false;
@@ -83,12 +92,15 @@ async function processOne(): Promise<boolean> {
     const accessToken = await getValidAccessToken(openId);
     if (!accessToken) throw new Error(`Sem token Google para o usuário ${openId}`);
 
+    const categoryCode3 = await getCategoryCode3(p, product.categoryCodeId);
+
     const result = await runForProduct(
       {
         id: product.id,
         sku: product.sku,
         nome: product.nome,
         sourceDriveFileId: product.sourceDriveFileId,
+        categoryCode3,
       },
       { accessToken },
       async (step, message) => {
