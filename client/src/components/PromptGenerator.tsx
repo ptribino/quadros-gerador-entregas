@@ -22,8 +22,8 @@ type StyleType =
   | 'boho'
   | 'classic'
   | 'contemporary'
-  | 'industrial'
-  | 'rustic';
+  | 'mid_century_br'
+  | 'brazilian_modern';
 
 const ROOM_OPTIONS: ReadonlyArray<{ value: RoomType; label: string }> = [
   { value: 'living_room', label: 'Sala' },
@@ -42,8 +42,8 @@ const STYLE_OPTIONS: ReadonlyArray<{ value: StyleType; label: string }> = [
   { value: 'boho', label: 'Boho' },
   { value: 'classic', label: 'Clássico' },
   { value: 'contemporary', label: 'Contemporâneo' },
-  { value: 'industrial', label: 'Industrial' },
-  { value: 'rustic', label: 'Rústico' },
+  { value: 'mid_century_br', label: 'Mid-Century Brasileiro' },
+  { value: 'brazilian_modern', label: 'Brasil Moderno' },
 ];
 
 interface PromptGeneratorProps {
@@ -97,10 +97,10 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
       'Classic aesthetic: refined cream and beige palette, traditional crown moldings, dark hardwood floors, upholstered furniture in tufted velvet, brass accents, framed art arranged with formal symmetry',
     contemporary:
       'Contemporary aesthetic: cool neutral palette with white walls, light concrete or pale wood floor, low-profile modular furniture in light gray, a fiddle leaf fig in a matte ceramic planter, soft diffused window light, upscale residential feel',
-    industrial:
-      'Industrial aesthetic: exposed brick walls and visible black steel structural beams, polished concrete floor, matte black metal fixtures, vintage Edison bulbs, leather and reclaimed wood furniture, raw and unpolished',
-    rustic:
-      'Rustic aesthetic: warm wood-clad walls or visible ceiling beams, woven wool throws, terracotta and amber palette, a vintage iron lantern, handcrafted ceramics, cozy farmhouse coziness',
+    mid_century_br:
+      'Mid-century Brazilian aesthetic (Sérgio Rodrigues / Joaquim Tenreiro / São Paulo 1960s school): warm dark jacaranda or rosewood furniture, aged caramel leather armchairs, brass and gold accents, neutral cream and ochre palette punctuated with deep emerald green or burnt orange, geometric Brazilian modernist objects, vintage textured rug, sophisticated curated heritage feel',
+    brazilian_modern:
+      'Brazilian modernist aesthetic inspired by Niemeyer and Lina Bo Bardi: polished concrete or pale cement floors, generous openings flooded with natural light, light tropical wood furniture, large tropical plants (Monstera/costela-de-adão, palm leaves, philodendron), warm white and ochre palette with lush deep green accents, breathable spacious feel rooted in tropical modernism',
   };
 
   const artworkFidelity =

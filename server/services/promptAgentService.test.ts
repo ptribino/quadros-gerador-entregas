@@ -71,12 +71,12 @@ describe('PromptAgentService', () => {
         deliveryTypes: ['lifestyle', 'mockup'],
         frameType: 'black',
         roomType: 'office',
-        styleType: 'industrial',
+        styleType: 'mid_century_br',
       });
 
       const lifestyle = variations.find((v) => v.type === 'lifestyle')!;
       expect(lifestyle.roomType).toBe('office');
-      expect(lifestyle.styleType).toBe('industrial');
+      expect(lifestyle.styleType).toBe('mid_century_br');
       expect(lifestyle.frameType).toBe('black');
 
       const mockup = variations.find((v) => v.type === 'mockup')!;

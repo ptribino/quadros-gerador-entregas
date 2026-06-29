@@ -23,8 +23,8 @@ type StyleType =
   | 'boho'
   | 'classic'
   | 'contemporary'
-  | 'industrial'
-  | 'rustic';
+  | 'mid_century_br'
+  | 'brazilian_modern';
 
 const ROOM_OPTIONS: ReadonlyArray<{ value: RoomType; label: string }> = [
   { value: 'living_room', label: 'Sala' },
@@ -43,8 +43,8 @@ const STYLE_OPTIONS: ReadonlyArray<{ value: StyleType; label: string }> = [
   { value: 'boho', label: 'Boho' },
   { value: 'classic', label: 'Clássico' },
   { value: 'contemporary', label: 'Contemporâneo' },
-  { value: 'industrial', label: 'Industrial' },
-  { value: 'rustic', label: 'Rústico' },
+  { value: 'mid_century_br', label: 'Mid-Century Brasileiro' },
+  { value: 'brazilian_modern', label: 'Brasil Moderno' },
 ];
 
 interface GeneratedImage {

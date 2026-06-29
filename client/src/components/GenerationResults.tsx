@@ -24,8 +24,8 @@ interface GeneratedItem {
     | 'boho'
     | 'classic'
     | 'contemporary'
-    | 'industrial'
-    | 'rustic';
+    | 'mid_century_br'
+    | 'brazilian_modern';
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error?: string;
 }
@@ -68,8 +68,8 @@ const styleLabels: Record<string, string> = {
   boho: 'Boho',
   classic: 'Clássico',
   contemporary: 'Contemporâneo',
-  industrial: 'Industrial',
-  rustic: 'Rústico',
+  mid_century_br: 'Mid-Century Brasileiro',
+  brazilian_modern: 'Brasil Moderno',
 };
 
 export default function GenerationResults({
