@@ -17,7 +17,8 @@ import { sql } from "drizzle-orm";
 // Mantenha em sincronia com scripts/seedCategoryCodes.ts.
 const SEEDS = [
   ["#AB Artes Abstratas",     "Artes Abstratas",     "ABS", "Estilos", "Abstratos"],
-  ["#AC Arte Clássica",       "Arte Clássica",       "ACL", "Estilos", "Clássicos"],
+  // ACL: pasta renomeada (Arte Clássica → Arte Cósmica); conteúdo é arte mística/espiritual.
+  ["#AC Arte Cósmica",        "Arte Cósmica",        "ACL", "Estilos", "Contemporâneos"],
   ["#AL Alcohol Ink",         "Alcohol Ink",         "AIK", "Estilos", "Abstratos"],
   ["#AN Vida Animal",         "Vida Animal",         "ANI", "Temas",   "Animais"],
   ["#BD Bebidas e Drinks",    "Bebidas e Drinks",    "BBD", "Temas",   "Gastronomia e Bebidas"],
@@ -33,7 +34,8 @@ const SEEDS = [
   // TRD: placeholder até Priscila criar categoria "Trios" na Tray
   ["#TD Trios Diversos",      "Trios Diversos",      "TRD", "Temas",   "Trios"],
   ["#VD Veículos Diversos",   "Veículos Diversos",   "VEI", "Temas",   "Veículos"],
-  ["#WR Wine and Red",        "Wine and Red",        "WIN", "Temas",   "Gastronomia e Bebidas"],
+  // WIN: pasta renomeada (Wine and Red → White and Red); conteúdo mudou pra paleta cromática.
+  ["#WR White and Red",       "White and Red",       "WIN", "Estilos", "Contemporâneos"],
 ] as const;
 
 export async function runStartupMigrations() {

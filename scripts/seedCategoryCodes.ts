@@ -20,7 +20,10 @@ import { getDb } from "../server/db";
 // essa subcategoria na Tray (sugerido nível 1: Temas).
 const SEEDS = [
   { folderName: "#AB Artes Abstratas",     displayName: "Artes Abstratas",     code3: "ABS", trayCategoriaPrincipal: "Estilos", traySubcategoria: "Abstratos" },
-  { folderName: "#AC Arte Clássica",       displayName: "Arte Clássica",       code3: "ACL", trayCategoriaPrincipal: "Estilos", traySubcategoria: "Clássicos" },
+  // ACL: pasta renomeada no Drive (Arte Clássica → Arte Cósmica). Conteúdo mudou
+  // pra arte mística/espiritual com paleta cósmica vibrante — mapeamento Tray
+  // vira Estilos/Contemporâneos por padrão; ajustar se Priscila criar categoria dedicada.
+  { folderName: "#AC Arte Cósmica",        displayName: "Arte Cósmica",        code3: "ACL", trayCategoriaPrincipal: "Estilos", traySubcategoria: "Contemporâneos" },
   { folderName: "#AL Alcohol Ink",         displayName: "Alcohol Ink",         code3: "AIK", trayCategoriaPrincipal: "Estilos", traySubcategoria: "Abstratos" },
   { folderName: "#AN Vida Animal",         displayName: "Vida Animal",         code3: "ANI", trayCategoriaPrincipal: "Temas",   traySubcategoria: "Animais" },
   { folderName: "#BD Bebidas e Drinks",    displayName: "Bebidas e Drinks",    code3: "BBD", trayCategoriaPrincipal: "Temas",   traySubcategoria: "Gastronomia e Bebidas" },
@@ -36,7 +39,10 @@ const SEEDS = [
   // TRD: placeholder. Priscila vai criar categoria "Trios" na Tray e me passa o caminho.
   { folderName: "#TD Trios Diversos",      displayName: "Trios Diversos",      code3: "TRD", trayCategoriaPrincipal: "Temas",   traySubcategoria: "Trios" },
   { folderName: "#VD Veículos Diversos",   displayName: "Veículos Diversos",   code3: "VEI", trayCategoriaPrincipal: "Temas",   traySubcategoria: "Veículos" },
-  { folderName: "#WR Wine and Red",        displayName: "Wine and Red",        code3: "WIN", trayCategoriaPrincipal: "Temas",   traySubcategoria: "Gastronomia e Bebidas" },
+  // WIN: pasta renomeada no Drive (Wine and Red → White and Red). Conteúdo
+  // mudou de bebidas pra paleta cromática vermelho/branco — mapeamento Tray
+  // vira Estilos/Contemporâneos por padrão; ajustar se Priscila preferir outro.
+  { folderName: "#WR White and Red",       displayName: "White and Red",       code3: "WIN", trayCategoriaPrincipal: "Estilos", traySubcategoria: "Contemporâneos" },
 ];
 
 async function run() {
