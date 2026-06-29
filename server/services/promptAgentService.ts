@@ -111,6 +111,37 @@ const ARTWORK_FIDELITY = [
   'The artwork inside the frame must look pixel-faithful to the reference image.',
 ].join(' ');
 
+// Material/finish constraints — aplicado em TODO prompt (lifestyle, mockup, vídeo).
+// Os quadros são impressos em papel sublimado fosco; nunca tem vidro.
+const FINISH_CONSTRAINTS = [
+  'MATERIAL: Print is on matte sublimation paper (no canvas, no glossy varnish).',
+  'NO GLASS: the frame has NO glass overlay, NO acrylic, NO clear cover of any kind.',
+  'NO REFLECTIONS: no specular highlights, no glare, no shiny surface on the artwork.',
+  'NO MAT BORDER: no white passe-partout, no inner mat — the artwork fills the frame edge to edge.',
+].join(' ');
+
+/**
+ * Para cada estilo, as molduras que harmonizam visualmente. Usado pelo
+ * pipeline do catálogo pra sortear UMA moldura coerente com o estilo
+ * sorteado, em vez de combinar aleatoriamente todos os 4 frames com todos
+ * os 8 estilos (algumas combinações ficam estranhas — ex: industrial com
+ * moldura branca).
+ */
+const FRAME_AFFINITY: Record<StyleType, readonly FrameType[]> = {
+  scandinavian: ['light_wood', 'white'],
+  japandi: ['light_wood', 'dark_wood', 'black'],
+  minimalist: ['white', 'black'],
+  boho: ['dark_wood', 'light_wood'],
+  classic: ['dark_wood', 'black'],
+  contemporary: ['black', 'white', 'light_wood'],
+  industrial: ['black', 'dark_wood'],
+  rustic: ['dark_wood', 'light_wood'],
+};
+
+export function framesForStyle(style: StyleType): readonly FrameType[] {
+  return FRAME_AFFINITY[style];
+}
+
 // Para mockup e vídeo continuamos lendo do .md (textos longos, escritos à mão).
 type PromptKey = string;
 
@@ -185,9 +216,10 @@ class PromptAgentService {
   private buildLifestylePrompt(frame: FrameType, room: RoomType, style: StyleType): string {
     return [
       `${STYLE_DESCRIPTIONS[style]} applied to ${ROOM_DESCRIPTIONS[room]}.`,
-      `Editorial interior photography, eye-level wide shot, 35mm lens, shallow depth of field, photorealistic. Lived-in authentic feel — not a photoshoot, not a showroom.`,
-      `Place the framed print prominently on the main wall of the scene, hung at appropriate eye-level height for the room.`,
-      `Frame: thin, ${FRAME_DESCRIPTIONS[frame]}.`,
+      `Refined editorial interior photography in the style of premium decor catalogs (think goquadros.com.br). Eye-level wide shot, 35mm lens, photorealistic. Warm golden sunlight streaming through a window, casting soft directional highlights on textiles, plants and surfaces. Thoughtful decorative details — a ceramic vase, a stack of design books, fresh greenery, woven textures. Sophisticated, lived-in atmosphere — never staged, never a showroom.`,
+      `The LARGE framed print is the absolute visual anchor of the composition, hung prominently centered on the main wall and occupying a generous portion of the wall area (roughly 30-45% of the wall height). It dominates the scene — never small, never decorative-only, always the focal point.`,
+      `Frame: thin, ${FRAME_DESCRIPTIONS[frame]}, intentionally chosen to harmonize with the room's palette and decor.`,
+      FINISH_CONSTRAINTS,
       ARTWORK_FIDELITY,
       `Aspect ratio 4:5.`,
     ].join(' ');
@@ -195,7 +227,10 @@ class PromptAgentService {
 
   private buildMockupPrompt(frame: FrameType): string {
     return [
-      `Clean e-commerce product mockup. Place the framed print on a plain white or very light gray wall. Frame: thin ${FRAME_DESCRIPTIONS[frame]} with white mat border. Straight frontal view, perfectly centered. Soft uniform studio lighting, no harsh shadows, no reflections on glass. Minimalist product photography style.`,
+      `Clean e-commerce product mockup. LARGE framed print centered on a plain off-white or very light warm gray wall, occupying the majority of the visible composition so the artwork dominates the frame.`,
+      `Frame: thin ${FRAME_DESCRIPTIONS[frame]}. The artwork goes ALL THE WAY to the frame edge — no white mat, no passe-partout, no border between artwork and frame.`,
+      FINISH_CONSTRAINTS,
+      `Straight frontal view, perfectly centered. Soft uniform studio lighting from the front-left, very subtle shadow on the right side to give depth, no harsh shadows. Minimalist premium product photography.`,
       ARTWORK_FIDELITY,
       `Aspect ratio 4:5.`,
     ].join(' ');
@@ -205,10 +240,11 @@ class PromptAgentService {
     return [
       `Use the uploaded image as the scene reference.`,
       ARTWORK_FIDELITY,
-      `The framed artwork must remain identical to the reference image throughout the entire video — same colors, composition and details in every frame. Do not alter the artwork at any point.`,
-      `Opening scene: young Brazilian woman, dark hair, 25–35 years old, casual linen outfit in neutral ivory tones, natural makeup, hanging the framed artwork shown in the reference image on a white wall, arms raised, satisfied expression, warm natural window light from left, candid authentic lifestyle moment, real home feel, not a photoshoot.`,
-      `Then camera slowly pulls back and pans to show the framed artwork directly from the front, full frame, centered on the wall, artwork clearly visible and identical to the reference image, no person in frame, soft even lighting, clean editorial product shot.`,
-      `Frame: thin ${FRAME_DESCRIPTIONS[frame]}. Style: photorealistic, cinematic, editorial home decor, smooth camera motion, warm natural light throughout. Duration: 8 seconds. Aspect ratio: 16:9.`,
+      FINISH_CONSTRAINTS,
+      `The LARGE framed artwork is the focal point and must remain identical to the reference image throughout the entire video — same colors, composition and details in every frame. Do not alter the artwork at any point.`,
+      `Opening scene: young Brazilian woman, dark hair, 25–35 years old, casual linen outfit in neutral ivory tones, natural makeup, hanging the framed artwork shown in the reference image on a wall, arms raised, satisfied expression, warm golden sunlight streaming through a side window, candid authentic lifestyle moment, real refined home feel, not a photoshoot.`,
+      `Then camera slowly pulls back and pans to show the framed artwork directly from the front, large and centered on the wall as the visual anchor, artwork clearly visible and identical to the reference image, no person in frame, soft even lighting, clean editorial product shot.`,
+      `Frame: thin ${FRAME_DESCRIPTIONS[frame]}, harmonized with the room's palette. Style: photorealistic, cinematic, refined editorial home decor, smooth camera motion, warm natural light throughout. Duration: 8 seconds. Aspect ratio: 16:9.`,
     ].join(' ');
   }
 

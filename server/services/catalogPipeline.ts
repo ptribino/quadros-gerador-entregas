@@ -13,7 +13,7 @@ import sharp from "sharp";
 import { ENV } from "../_core/env";
 import { googleDriveService } from "./googleDriveService";
 import { googleImagenService } from "./freepikService";
-import { promptAgentService, FRAMES, STYLES } from "./promptAgentService";
+import { promptAgentService, FRAMES, STYLES, framesForStyle } from "./promptAgentService";
 import type { FrameType, RoomType, StyleType } from "./promptAgentService";
 
 export type { FrameType, RoomType, StyleType };
@@ -225,19 +225,24 @@ export async function runForProduct(
   );
   await googleDriveService.makePublic(accessToken, originalWebFile.id);
 
-  // Moldura única para todas as 3 imagens do produto
-  const frame: FrameType = pickRandom(FRAMES);
+  // Sorteia primeiro estilo, DEPOIS uma moldura compatível com aquele estilo.
+  // Isso evita combinações esquisitas (ex: industrial com moldura branca).
+  const regularStyle: StyleType = pickRandom(STYLES);
+  const proStyle: StyleType = pickRandom(STYLES);
+
+  // Moldura única pras 3 imagens do produto — escolhida em função do estilo
+  // do lifestyle "principal" pra manter coerência. Mockup usa a mesma moldura
+  // (apresentação isolada, sem ambiente).
+  const frame: FrameType = pickRandom(framesForStyle(regularStyle));
 
   // Cômodos elegíveis dependem da categoria do produto (ex: INF → só kids_room).
   const eligibleRooms = roomsForCategory(product.categoryCode3);
 
-  // Sorteios independentes pra cada lifestyle. Se a categoria tem só 1 cômodo
-  // elegível (ex: INF), os dois lifestyles caem no mesmo cômodo — o estilo
-  // distingue (e isso é OK: dois ângulos do mesmo cômodo com estéticas diferentes).
+  // Sorteios independentes de cômodo pra cada lifestyle. Se a categoria tem
+  // só 1 cômodo elegível, os dois lifestyles caem no mesmo cômodo — o estilo
+  // distingue.
   const regularRoom: RoomType = pickRandom(eligibleRooms);
   const proRoom: RoomType = pickRandom(eligibleRooms);
-  const regularStyle: StyleType = pickRandom(STYLES);
-  const proStyle: StyleType = pickRandom(STYLES);
 
   // ETAPA 2 — Lifestyle "regular"
   const lifeRaw = await generateLifestyle(frame, regularRoom, regularStyle, referenceDataUrl);

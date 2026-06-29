@@ -106,21 +106,28 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
   const artworkFidelity =
     'CRITICAL — ABSOLUTE FIDELITY TO THE UPLOADED ARTWORK: The uploaded image is the artwork that will be placed inside the frame. You MUST reproduce it EXACTLY as provided — identical composition, identical colors, identical lines, identical details, identical proportions. Do NOT alter, reinterpret, stylize, recolor, recrop, simplify, redraw or change the artwork in ANY way. The artwork inside the frame must look pixel-faithful to the reference image.';
 
+  const finishConstraints =
+    'MATERIAL: Print is on matte sublimation paper (no canvas, no glossy varnish). NO GLASS: the frame has NO glass overlay, NO acrylic, NO clear cover of any kind. NO REFLECTIONS: no specular highlights, no glare, no shiny surface on the artwork. NO MAT BORDER: no white passe-partout, no inner mat — the artwork fills the frame edge to edge.';
+
   const generatedPrompt = useMemo(() => {
     let prompt: string;
 
     if (deliveryType === 'lifestyle') {
       prompt = [
         `${styleDescriptions[styleType]} applied to ${roomDescriptions[roomType]}.`,
-        `Editorial interior photography, eye-level wide shot, 35mm lens, shallow depth of field, photorealistic. Lived-in authentic feel — not a photoshoot, not a showroom.`,
-        `Place the framed print prominently on the main wall of the scene, hung at appropriate eye-level height for the room.`,
-        `Frame: thin, ${frameLabel[frameType]}.`,
+        `Refined editorial interior photography in the style of premium decor catalogs (think goquadros.com.br). Eye-level wide shot, 35mm lens, photorealistic. Warm golden sunlight streaming through a window, casting soft directional highlights on textiles, plants and surfaces. Thoughtful decorative details — a ceramic vase, a stack of design books, fresh greenery, woven textures. Sophisticated, lived-in atmosphere — never staged, never a showroom.`,
+        `The LARGE framed print is the absolute visual anchor of the composition, hung prominently centered on the main wall and occupying a generous portion of the wall area (roughly 30-45% of the wall height). It dominates the scene — never small, never decorative-only, always the focal point.`,
+        `Frame: thin, ${frameLabel[frameType]}, intentionally chosen to harmonize with the room's palette and decor.`,
+        finishConstraints,
         artworkFidelity,
         `Aspect ratio 4:5.`,
       ].join(' ');
     } else if (deliveryType === 'mockup') {
       prompt = [
-        `Clean e-commerce product mockup. Place the framed print on a plain white or very light gray wall. Frame: thin ${frameLabel[frameType]} with white mat border. Straight frontal view, perfectly centered. Soft uniform studio lighting, no harsh shadows, no reflections on glass. Minimalist product photography style.`,
+        `Clean e-commerce product mockup. LARGE framed print centered on a plain off-white or very light warm gray wall, occupying the majority of the visible composition so the artwork dominates the frame.`,
+        `Frame: thin ${frameLabel[frameType]}. The artwork goes ALL THE WAY to the frame edge — no white mat, no passe-partout, no border between artwork and frame.`,
+        finishConstraints,
+        `Straight frontal view, perfectly centered. Soft uniform studio lighting from the front-left, very subtle shadow on the right side to give depth, no harsh shadows. Minimalist premium product photography.`,
         artworkFidelity,
         `Aspect ratio 4:5.`,
       ].join(' ');
@@ -128,8 +135,9 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
       prompt = [
         `Use the uploaded image as the scene reference.`,
         artworkFidelity,
-        `The framed artwork must remain identical to the reference image throughout the entire video. Opening scene: young Brazilian woman, dark hair, 25–35 years old, casual linen outfit in neutral ivory tones, hanging the framed artwork on a white wall, warm natural window light from left, candid authentic lifestyle moment. Then camera slowly pulls back to show the framed artwork directly from the front, full frame, centered on the wall, no person in frame, soft even lighting, clean editorial product shot.`,
-        `Frame: thin ${frameLabel[frameType]}. Style: photorealistic, cinematic, editorial home decor, smooth camera motion. Duration: 8 seconds. Aspect ratio: 16:9.`,
+        finishConstraints,
+        `The LARGE framed artwork is the focal point and must remain identical to the reference image throughout the entire video. Opening scene: young Brazilian woman, dark hair, 25–35 years old, casual linen outfit in neutral ivory tones, hanging the framed artwork on a wall, warm golden sunlight streaming through a side window, candid authentic lifestyle moment, real refined home feel. Then camera slowly pulls back to show the framed artwork directly from the front, large and centered on the wall as the visual anchor, no person in frame, soft even lighting, clean editorial product shot.`,
+        `Frame: thin ${frameLabel[frameType]}, harmonized with the room's palette. Style: photorealistic, cinematic, refined editorial home decor, smooth camera motion. Duration: 8 seconds. Aspect ratio: 16:9.`,
       ].join(' ');
     }
 
