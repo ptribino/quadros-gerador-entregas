@@ -18,8 +18,8 @@ type StyleType =
   | 'boho'
   | 'classic'
   | 'contemporary'
-  | 'industrial'
-  | 'rustic';
+  | 'mid_century_br'
+  | 'brazilian_modern';
 
 interface PromptVariation {
   type: DeliveryType;
@@ -48,8 +48,8 @@ const STYLES: readonly StyleType[] = [
   'boho',
   'classic',
   'contemporary',
-  'industrial',
-  'rustic',
+  'mid_century_br',
+  'brazilian_modern',
 ];
 
 const FRAME_DESCRIPTIONS: Record<FrameType, string> = {
@@ -97,10 +97,10 @@ const STYLE_DESCRIPTIONS: Record<StyleType, string> = {
     'Classic aesthetic: refined cream and beige palette, traditional crown moldings, dark hardwood floors, upholstered furniture in tufted velvet, brass accents, framed art arranged with formal symmetry',
   contemporary:
     'Contemporary aesthetic: cool neutral palette with white walls, light concrete or pale wood floor, low-profile modular furniture in light gray, a fiddle leaf fig in a matte ceramic planter, soft diffused window light, upscale residential feel',
-  industrial:
-    'Industrial aesthetic: exposed brick walls and visible black steel structural beams, polished concrete floor, matte black metal fixtures, vintage Edison bulbs, leather and reclaimed wood furniture, raw and unpolished',
-  rustic:
-    'Rustic aesthetic: warm wood-clad walls or visible ceiling beams, woven wool throws, terracotta and amber palette, a vintage iron lantern, handcrafted ceramics, cozy farmhouse coziness',
+  mid_century_br:
+    'Mid-century Brazilian aesthetic (Sérgio Rodrigues / Joaquim Tenreiro / São Paulo 1960s school): warm dark jacaranda or rosewood furniture, aged caramel leather armchairs, brass and gold accents, neutral cream and ochre palette punctuated with deep emerald green or burnt orange, geometric Brazilian modernist objects, vintage textured rug, sophisticated curated heritage feel',
+  brazilian_modern:
+    'Brazilian modernist aesthetic inspired by Niemeyer and Lina Bo Bardi: polished concrete or pale cement floors, generous openings flooded with natural light, light tropical wood furniture, large tropical plants (Monstera/costela-de-adão, palm leaves, philodendron), warm white and ochre palette with lush deep green accents, breathable spacious feel rooted in tropical modernism',
 };
 
 const ARTWORK_FIDELITY = [
@@ -134,8 +134,8 @@ const FRAME_AFFINITY: Record<StyleType, readonly FrameType[]> = {
   boho: ['dark_wood', 'light_wood'],
   classic: ['dark_wood', 'black'],
   contemporary: ['black', 'white', 'light_wood'],
-  industrial: ['black', 'dark_wood'],
-  rustic: ['dark_wood', 'light_wood'],
+  mid_century_br: ['dark_wood', 'black'],
+  brazilian_modern: ['light_wood', 'dark_wood'],
 };
 
 export function framesForStyle(style: StyleType): readonly FrameType[] {
@@ -251,6 +251,20 @@ class PromptAgentService {
       `Then camera slowly pulls back and pans to show the framed artwork directly from the front, large and centered on the wall as the visual anchor, artwork clearly visible and identical to the reference image, no person in frame, soft even lighting, clean editorial product shot.`,
       `Frame: thin ${FRAME_DESCRIPTIONS[frame]}, harmonized with the room's palette. Style: photorealistic, cinematic, refined editorial home decor, smooth camera motion, warm natural light throughout. Duration: 8 seconds. Aspect ratio: 16:9.`,
     ].join(' ');
+  }
+
+  /**
+   * Variante do lifestyle em 16:9 — usada no still inicial do pipeline de
+   * vídeo (Imagen gera a cena estática e o Veo só aplica movimento de câmera).
+   * Garante que o still herda TODAS as regras do lifestyle (quadro grande,
+   * sublimado matte, sem vidro, deep focus, editorial não-AI) em vez de cair
+   * em prompt hardcoded.
+   */
+  buildLifestyleStill16x9(frame: FrameType, room: RoomType, style: StyleType): string {
+    return this.buildLifestylePrompt(frame, room, style).replace(
+      'Aspect ratio 4:5.',
+      'Aspect ratio 16:9.',
+    );
   }
 
   /**

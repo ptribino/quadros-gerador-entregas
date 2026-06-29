@@ -28,8 +28,8 @@ type StyleType =
   | 'boho'
   | 'classic'
   | 'contemporary'
-  | 'industrial'
-  | 'rustic';
+  | 'mid_century_br'
+  | 'brazilian_modern';
 
 const FRAME_FILE_LABEL: Record<FrameType, string> = {
   light_wood: 'amadeirado-claro',
@@ -55,8 +55,8 @@ const STYLE_OPTIONS: ReadonlyArray<{ value: StyleType; label: string }> = [
   { value: 'boho', label: 'Boho' },
   { value: 'classic', label: 'Clássico' },
   { value: 'contemporary', label: 'Contemporâneo' },
-  { value: 'industrial', label: 'Industrial' },
-  { value: 'rustic', label: 'Rústico' },
+  { value: 'mid_century_br', label: 'Mid-Century Brasileiro' },
+  { value: 'brazilian_modern', label: 'Brasil Moderno' },
 ];
 
 interface GeneratedItem {
@@ -100,12 +100,13 @@ export default function Home() {
     setGeneratedItems([]);
 
     try {
+      const needsScene = deliveryType === 'lifestyle' || deliveryType === 'video';
       const result = await generateMutation.mutateAsync({
         imageUrl: selectedImage.url,
         deliveryTypes: [deliveryType],
         frameType,
-        roomType: deliveryType === 'lifestyle' ? roomType : undefined,
-        styleType: deliveryType === 'lifestyle' ? styleType : undefined,
+        roomType: needsScene ? roomType : undefined,
+        styleType: needsScene ? styleType : undefined,
       });
 
       const items: GeneratedItem[] = result.results.map((r, index) => ({
@@ -378,8 +379,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Ambiente + Estilo (empilhados na coluna da direita) — só para Lifestyle */}
-            {deliveryType === 'lifestyle' && (
+            {/* Ambiente + Estilo (empilhados na coluna da direita) — Lifestyle e Vídeo */}
+            {(deliveryType === 'lifestyle' || deliveryType === 'video') && (
               <div className="space-y-6">
                 <div className="space-y-3">
                   <label className="block text-sm font-semibold text-foreground">Ambiente (cômodo)</label>

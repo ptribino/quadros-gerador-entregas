@@ -22,16 +22,9 @@ const STYLE_TYPES = [
   'boho',
   'classic',
   'contemporary',
-  'industrial',
-  'rustic',
+  'mid_century_br',
+  'brazilian_modern',
 ] as const;
-
-const FRAME_DESCRIPTIONS: Record<(typeof FRAME_TYPES)[number], string> = {
-  light_wood: 'natural light oak wood',
-  dark_wood: 'dark walnut wood with a rich espresso brown finish',
-  white: 'painted matte white with a clean smooth finish',
-  black: 'painted matte black with a clean smooth finish',
-};
 
 export const generationRouter = router({
   /**
@@ -52,8 +45,11 @@ export const generationRouter = router({
           styleType: z.enum(STYLE_TYPES).optional(),
         })
         .refine(
-          (data) => !data.deliveryTypes.includes('lifestyle') || (!!data.roomType && !!data.styleType),
-          { message: 'roomType e styleType são obrigatórios quando deliveryTypes inclui "lifestyle"' },
+          (data) => {
+            const needsRoomStyle = data.deliveryTypes.some((t) => t === 'lifestyle' || t === 'video');
+            return !needsRoomStyle || (!!data.roomType && !!data.styleType);
+          },
+          { message: 'roomType e styleType são obrigatórios para lifestyle e vídeo' },
         ),
     )
     .mutation(async ({ input }) => {
@@ -70,9 +66,19 @@ export const generationRouter = router({
         for (const promptVariation of variations) {
           try {
             if (promptVariation.type === 'video') {
-              // PASSO 1: Gerar imagem estática do ambiente com Gemini (fidelidade à arte original)
-              const frameLabel = FRAME_DESCRIPTIONS[promptVariation.frameType];
-              const stillPrompt = `Generate a photorealistic wide shot (16:9) of this artwork displayed in a ${frameLabel} frame, hanging centered on a white wall in a bright Scandinavian living room. Below the frame there is a beige linen sofa. Warm natural window light from the left. The artwork in the frame must be EXACTLY as provided — do not alter, reinterpret or stylize it in any way. Reproduce every color, line and detail with absolute fidelity. Editorial interior photography, cinematic.`;
+              // PASSO 1: Gerar still 16:9 com Gemini Imagen.
+              // Usa o MESMO prompt do lifestyle (incluindo room/style escolhidos
+              // pelo usuário) — só muda pra 16:9. Sem isso, o still ignora a
+              // categoria e cai sempre em "Scandinavian living room", o que
+              // faz produto infantil aparecer em sala etc.
+              if (!input.roomType || !input.styleType) {
+                throw new Error('video requires roomType and styleType');
+              }
+              const stillPrompt = promptAgentService.buildLifestyleStill16x9(
+                promptVariation.frameType,
+                input.roomType,
+                input.styleType,
+              );
 
               console.log('[Generation] Step 1: Generating still frame with Gemini (preserving artwork fidelity)...');
               const stillImage = await googleImagenService.generateImages({
