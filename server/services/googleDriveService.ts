@@ -232,10 +232,15 @@ class GoogleDriveService {
     const baseQ = `(mimeType = '${folderType}' or mimeType = '${shortcutType}') and trashed=false`;
     const q = parentFolderId ? `${baseQ} and '${parentFolderId}' in parents` : baseQ;
     const params = new URLSearchParams({
-      spaces: 'drive',
       fields: 'files(id,name,mimeType,webViewLink,shortcutDetails)',
       pageSize: '100',
       orderBy: 'name',
+      // Necessário pra enxergar subpastas em shared drives — sem isso a API
+      // retorna 0 quando navegamos dentro de "Compartilhados comigo" (caso
+      // do banco de imagens da GN Packz).
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+      corpora: 'allDrives',
       q,
     });
 
