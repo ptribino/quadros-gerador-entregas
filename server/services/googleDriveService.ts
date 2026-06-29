@@ -8,6 +8,11 @@ import { ENV } from '../_core/env';
 export function extractDriveFileId(input: string): string {
   if (!input) return input;
   const trimmed = input.trim();
+  // URL do nosso próprio proxy: /img/<fileId>.<ext>
+  // Precisa vir ANTES dos outros padrões pra `extractDriveFileId(toTrayImageUrl(x))`
+  // ser idempotente (sem isso a função aninha proxy/img/proxy/img/...).
+  const fromProxy = trimmed.match(/\/img\/([a-zA-Z0-9_-]+)\.[a-z]+/i);
+  if (fromProxy) return fromProxy[1];
   // URL completa: https://drive.google.com/file/d/<ID>/view  ou  uc?...&id=<ID>
   const fromUrlD = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
   if (fromUrlD) return fromUrlD[1];
