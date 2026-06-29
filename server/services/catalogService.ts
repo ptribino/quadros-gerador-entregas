@@ -69,7 +69,7 @@ Sua função: receber UMA imagem de arte (do banco do fabricante) e produzir os 
 
 Regras inegociáveis:
 - Escreva 100% em português brasileiro.
-- O nome do produto começa com "Quadro Decorativo" quando combinar com a arte.
+- O nome do produto começa com "Quadro " (sem a palavra "Decorativo"). Exemplo: "Quadro Panda Bebê Fofo no Jardim".
 - A descrição é HTML puro (sem \\\`\\\`\\\`html, sem markdown), no template abaixo, preenchendo APENAS os trechos entre {{}}.
 - O "potencialVenda" deve refletir honestamente quão comercial a arte é: 10 = best-seller óbvio, 1 = arte interessante mas nichada demais.
 - Não invente dimensões, materiais, preços ou prazos — esses campos são preenchidos por outro sistema.

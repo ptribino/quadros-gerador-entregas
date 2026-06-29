@@ -199,6 +199,7 @@ export async function runForProduct(
   const originalMime = product.sourceDriveMimeType || "image/jpeg";
   const referenceDataUrl = `data:${originalMime};base64,${originalBuffer.toString("base64")}`;
 
+  // Salva o original sem resize (arquivo / impressão)
   const origExt = originalMime.includes("png") ? "png" : "jpg";
   await googleDriveService.uploadFile(
     accessToken,
@@ -207,6 +208,18 @@ export async function runForProduct(
     originalMime,
     hdFolder.id,
   );
+
+  // Versão "web" da arte original (sem moldura/ambiente) — vira a imageUrl1
+  // do produto na Tray. Mesmo pipeline de compressão usado pelos lifestyles.
+  const originalWeb = await fitForEcommerce(originalBuffer);
+  const originalWebFile = await googleDriveService.uploadFile(
+    accessToken,
+    `${product.sku}-web.jpg`,
+    originalWeb.buffer,
+    originalWeb.mimeType,
+    hdFolder.id,
+  );
+  await googleDriveService.makePublic(accessToken, originalWebFile.id);
 
   // Moldura única para todas as 3 imagens do produto
   const frame: FrameType = pickRandom(FRAMES);
@@ -261,16 +274,17 @@ export async function runForProduct(
   await googleDriveService.makePublic(accessToken, mockFile.id);
   await onProgress?.(3, `mockup ${frame}`);
 
-  // imageUrls[0..2] = lifestyle, profissional, mockup
-  // imageUrls[3]    = referência de tamanhos (mesma para todos os produtos)
+  // Ordem das imagens na planilha Tray:
+  //   imageUrls[0] = arte original web-fit (sem moldura/ambiente) — imagem principal
+  //   imageUrls[1] = lifestyle 1
+  //   imageUrls[2] = lifestyle 2
+  //   imageUrls[3] = mockup
   const imageUrls = [
+    googleDriveService.publicDownloadUrl(originalWebFile.id),
     googleDriveService.publicDownloadUrl(lifeFile.id),
     googleDriveService.publicDownloadUrl(proFile.id),
     googleDriveService.publicDownloadUrl(mockFile.id),
   ];
-  if (ENV.driveSizeReferenceFileId) {
-    imageUrls.push(googleDriveService.publicDownloadUrl(ENV.driveSizeReferenceFileId));
-  }
 
   return {
     productFolderId: productFolder.id,

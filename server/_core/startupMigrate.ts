@@ -13,24 +13,27 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { migrate } from "drizzle-orm/mysql2/migrator";
 import { sql } from "drizzle-orm";
 
+// Mapeamento code3 → (Tray catN1, Tray catN2) usando categorias reais da loja.
+// Mantenha em sincronia com scripts/seedCategoryCodes.ts.
 const SEEDS = [
-  ["#AB Artes Abstratas",     "Artes Abstratas",     "ABS", "Quadros Decorativos", "Abstratos"],
-  ["#AC Arte Clássica",       "Arte Clássica",       "ACL", "Quadros Decorativos", "Clássicos"],
-  ["#AI Alcohol Ink",         "Alcohol Ink",         "AIK", "Quadros Decorativos", "Abstratos"],
-  ["#AN Vida Animal",         "Vida Animal",         "ANI", "Quadros Decorativos", "Animais"],
-  ["#BD Bebidas e Drinks",    "Bebidas e Drinks",    "BBD", "Quadros Decorativos", "Gastronomia"],
-  ["#ES Esculturas Hipsters", "Esculturas Hipsters", "ESC", "Quadros Decorativos", "Esculturas"],
-  ["#FG Formas Geométricas",  "Formas Geométricas",  "FGE", "Quadros Decorativos", "Geométricos"],
-  ["#FP Flores e Plantas",    "Flores e Plantas",    "FLO", "Quadros Decorativos", "Florais"],
-  ["#FR Frases e Citações",   "Frases e Citações",   "FRA", "Quadros Decorativos", "Frases"],
-  ["#GP Galaxias e Planetas", "Galáxias e Planetas", "GLX", "Quadros Decorativos", "Espaço"],
-  ["#IN Tema Infantil",       "Tema Infantil",       "INF", "Quadros Decorativos", "Infantil"],
-  ["#MF Mulheres Floridas",   "Mulheres Floridas",   "MUF", "Quadros Decorativos", "Femininos"],
-  ["#PN Paisagens Naturais",  "Paisagens Naturais",  "PAI", "Quadros Decorativos", "Paisagens"],
-  ["#PO Pinturas a Óleo",     "Pinturas a Óleo",     "POL", "Quadros Decorativos", "Pinturas"],
-  ["#TD Trios Diversos",      "Trios Diversos",      "TRD", "Quadros Decorativos", "Trios"],
-  ["#VD Veículos Diversos",   "Veículos Diversos",   "VEI", "Quadros Decorativos", "Veículos"],
-  ["#WR Wine and Red",        "Wine and Red",        "WIN", "Quadros Decorativos", "Vinhos"],
+  ["#AB Artes Abstratas",     "Artes Abstratas",     "ABS", "Estilos", "Abstratos"],
+  ["#AC Arte Clássica",       "Arte Clássica",       "ACL", "Estilos", "Clássicos"],
+  ["#AI Alcohol Ink",         "Alcohol Ink",         "AIK", "Estilos", "Abstratos"],
+  ["#AN Vida Animal",         "Vida Animal",         "ANI", "Temas",   "Animais"],
+  ["#BD Bebidas e Drinks",    "Bebidas e Drinks",    "BBD", "Temas",   "Gastronomia e Bebidas"],
+  ["#ES Esculturas Hipsters", "Esculturas Hipsters", "ESC", "Estilos", "Contemporâneos"],
+  ["#FG Formas Geométricas",  "Formas Geométricas",  "FGE", "Estilos", "Geométricos"],
+  ["#FP Flores e Plantas",    "Flores e Plantas",    "FLO", "Temas",   "Botânicos"],
+  ["#FR Frases e Citações",   "Frases e Citações",   "FRA", "Temas",   "Frases"],
+  ["#GP Galaxias e Planetas", "Galáxias e Planetas", "GLX", "Temas",   "Galáxias e Planetas"],
+  ["#IN Tema Infantil",       "Tema Infantil",       "INF", "Temas",   "Kids/Infantil"],
+  ["#MF Mulheres Floridas",   "Mulheres Floridas",   "MUF", "Temas",   "Femininos"],
+  ["#PN Paisagens Naturais",  "Paisagens Naturais",  "PAI", "Temas",   "Natureza e Paisagens"],
+  ["#PO Pinturas a Óleo",     "Pinturas a Óleo",     "POL", "Estilos", "Clássicos"],
+  // TRD: placeholder até Priscila criar categoria "Trios" na Tray
+  ["#TD Trios Diversos",      "Trios Diversos",      "TRD", "Temas",   "Trios"],
+  ["#VD Veículos Diversos",   "Veículos Diversos",   "VEI", "Temas",   "Veículos"],
+  ["#WR Wine and Red",        "Wine and Red",        "WIN", "Temas",   "Gastronomia e Bebidas"],
 ] as const;
 
 export async function runStartupMigrations() {
@@ -107,6 +110,18 @@ export async function runStartupMigrations() {
     console.log(
       `[startupMigrate] Seed categorias OK (${inserted} novas, ${SEEDS.length - inserted} já existiam)`,
     );
+
+    // Normaliza nomes legados: "Quadro Decorativo X" → "Quadro X".
+    // Idempotente — após a primeira execução nenhum nome bate o LIKE.
+    const renameResult: any = await db.execute(
+      sql`UPDATE products
+          SET nome = REPLACE(nome, 'Quadro Decorativo ', 'Quadro ')
+          WHERE nome LIKE 'Quadro Decorativo %'`,
+    );
+    const affected = renameResult?.[0]?.affectedRows ?? 0;
+    if (affected > 0) {
+      console.log(`[startupMigrate] Renomeados ${affected} produtos: "Quadro Decorativo X" → "Quadro X"`);
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error && err.stack ? err.stack : "";

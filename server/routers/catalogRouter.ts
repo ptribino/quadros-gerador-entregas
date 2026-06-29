@@ -384,12 +384,6 @@ export const catalogRouter = router({
       // Colunas 1 e 2 ("Código do produto (ID)" e "Código da categoria
       // principal (ID)") são numéricas — deixadas em branco para criar
       // produtos novos (Tray gera os IDs); preencher só ao atualizar.
-      // URL pública do arquivo de "tamanhos / cores das molduras",
-      // usada como imageUrl4 fallback caso o produto não tenha sido gerado.
-      // `publicDownloadUrl` sanitiza o ID se vier com `d/` ou URL completa.
-      const sizeRefUrl = ENV.driveSizeReferenceFileId
-        ? googleDriveService.publicDownloadUrl(ENV.driveSizeReferenceFileId)
-        : "";
 
       // Transforma URLs antigas salvas no DB (formato `uc?export=download&id=...`)
       // em URLs do proxy `/img/<id>.jpg` que a Tray aceita. Sem isso, produtos
@@ -448,14 +442,18 @@ export const catalogRouter = router({
           catId: null,
           nome: p.nome,
           html: p.descricaoHtml ?? "",
-          // imageUrl1 = lifestyle, 2 = profissional, 3 = mockup
-          // toTrayImageUrl converte qualquer URL antiga em URL do proxy
-          // `/img/<id>.jpg` que a Tray aceita (ela valida extensão na URL).
+          // Ordem (pipeline novo):
+          //   1 = arte original web-fit (sem moldura/ambiente)
+          //   2 = lifestyle 1
+          //   3 = lifestyle 2
+          //   4 = mockup
+          // Produtos gerados ANTES dessa mudança têm ordem antiga
+          // (1 = lifestyle, 4 = referência de tamanhos) — precisam ser
+          // re-gerados pra ficarem no formato novo.
           img1: toTrayImageUrl(p.imageUrl1),
           img2: toTrayImageUrl(p.imageUrl2),
           img3: toTrayImageUrl(p.imageUrl3),
-          // 4ª imagem é fixa: referência de tamanhos/molduras
-          img4: toTrayImageUrl(p.imageUrl4) || sizeRefUrl,
+          img4: toTrayImageUrl(p.imageUrl4),
           precoVenda: Number(p.precoVenda),
           peso: p.pesoGramas,
           estoque: p.estoque,
@@ -475,7 +473,7 @@ export const catalogRouter = router({
           seoDesc,
           seoKeywords: p.aiPalavrasChave ?? "",
           slug: p.slugSeo ?? "",
-          catN1: c?.trayCategoriaPrincipal ?? "Quadros Decorativos",
+          catN1: c?.trayCategoriaPrincipal ?? "Temas",
           catN2: c?.traySubcategoria ?? "",
           naLoja: p.exibirNaLoja ? "Sim" : "Não",
         });
