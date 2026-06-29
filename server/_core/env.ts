@@ -21,4 +21,9 @@ export const ENV = {
   // Quando setado, vira a 4ª imagem (imageUrl4) de TODOS os produtos no
   // export Tray, sem precisar fazer upload por produto.
   driveSizeReferenceFileId: process.env.DRIVE_SIZE_REFERENCE_FILE_ID ?? "",
+  // URL pública do app (sem barra no final). Usada pra montar URLs do proxy
+  // de imagens `/img/<fileId>.jpg` que vão pra planilha da Tray — a Tray
+  // valida extensão na URL e rejeita o formato `uc?export=download&id=...`
+  // direto do Drive.
+  publicAppUrl: (process.env.PUBLIC_APP_URL ?? "").replace(/\/$/, ""),
 };

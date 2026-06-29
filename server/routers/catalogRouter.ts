@@ -4,7 +4,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getValidAccessToken } from "../_core/oauth";
-import { googleDriveService } from "../services/googleDriveService";
+import { googleDriveService, extractDriveFileId } from "../services/googleDriveService";
 import { analyzeImageForCatalog, buildSku, buildSlug } from "../services/catalogService";
 import { getDb } from "../db";
 import { categoryCodes, products, productStatusEnum } from "../../drizzle/schema";
@@ -391,6 +391,14 @@ export const catalogRouter = router({
         ? googleDriveService.publicDownloadUrl(ENV.driveSizeReferenceFileId)
         : "";
 
+      // Transforma URLs antigas salvas no DB (formato `uc?export=download&id=...`)
+      // em URLs do proxy `/img/<id>.jpg` que a Tray aceita. Sem isso, produtos
+      // gerados antes desse fix continuam quebrando na importação.
+      const toTrayImageUrl = (saved: string | null | undefined): string => {
+        if (!saved) return "";
+        return googleDriveService.publicDownloadUrl(extractDriveFileId(saved));
+      };
+
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Worksheet");
       ws.columns = [
@@ -433,17 +441,21 @@ export const catalogRouter = router({
         const seoDesc = plainText.slice(0, 160);
 
         ws.addRow({
-          id: "",          // vazio = produto novo (Tray gera)
-          catId: "",       // preencher manualmente com ID da categoria criada na Tray
+          // null deixa célula em branco. String vazia "" quebra com
+          // "Somente valor numérico permitido" — Tray quer literalmente nada
+          // pra gerar IDs novos.
+          id: null,
+          catId: null,
           nome: p.nome,
           html: p.descricaoHtml ?? "",
           // imageUrl1 = lifestyle, 2 = profissional, 3 = mockup
-          // (preenchidos pelo worker quando o usuário roda "Gerar imagens")
-          img1: p.imageUrl1 ?? "",
-          img2: p.imageUrl2 ?? "",
-          img3: p.imageUrl3 ?? "",
+          // toTrayImageUrl converte qualquer URL antiga em URL do proxy
+          // `/img/<id>.jpg` que a Tray aceita (ela valida extensão na URL).
+          img1: toTrayImageUrl(p.imageUrl1),
+          img2: toTrayImageUrl(p.imageUrl2),
+          img3: toTrayImageUrl(p.imageUrl3),
           // 4ª imagem é fixa: referência de tamanhos/molduras
-          img4: p.imageUrl4 ?? sizeRefUrl,
+          img4: toTrayImageUrl(p.imageUrl4) || sizeRefUrl,
           precoVenda: Number(p.precoVenda),
           peso: p.pesoGramas,
           estoque: p.estoque,

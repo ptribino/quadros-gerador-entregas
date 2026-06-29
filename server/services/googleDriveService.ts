@@ -5,7 +5,7 @@ import { ENV } from '../_core/env';
  * comum (URL completa, "d/<id>", ou só o ID). Defensivo contra
  * copy/paste que inclui o `d/` sem querer.
  */
-function extractDriveFileId(input: string): string {
+export function extractDriveFileId(input: string): string {
   if (!input) return input;
   const trimmed = input.trim();
   // URL completa: https://drive.google.com/file/d/<ID>/view  ou  uc?...&id=<ID>
@@ -279,19 +279,27 @@ class GoogleDriveService {
   }
 
   /**
-   * URL "uc?export=download&id=..." que a Tray consegue baixar como imagem
-   * direta — desde que o arquivo seja público (`makePublic`).
-   * `view`-style URLs retornam HTML preview, então a Tray falha; daí o
-   * formato `uc?export=download` ser obrigatório.
+   * URL pública da imagem que vai para a planilha da Tray.
    *
-   * Aceita qualquer um destes formatos pra `fileId` (sanitiza p/ só o ID):
+   * Aponta pro nosso proxy `/img/<fileId>.jpg` em vez do Drive direto porque
+   * a Tray valida EXTENSÃO na URL e rejeita `uc?export=download&id=...`.
+   * O proxy faz fetch do Drive por baixo (ver server/_core/imageProxy.ts).
+   *
+   * Se `PUBLIC_APP_URL` não estiver configurado (ex: dev local sem ngrok),
+   * cai pra URL Drive direta — funciona pra preview manual, falha na Tray.
+   *
+   * Aceita qualquer formato comum pra `fileId` (sanitiza p/ só o ID):
    *   - "1abc...XYZ"                                                (ID puro)
    *   - "d/1abc...XYZ"                                              (path comum no copy/paste)
    *   - "https://drive.google.com/file/d/1abc...XYZ/view"           (URL completa)
    *   - "https://drive.google.com/uc?export=download&id=1abc...XYZ" (URL já formada)
    */
   publicDownloadUrl(fileId: string): string {
-    return `https://drive.google.com/uc?export=download&id=${extractDriveFileId(fileId)}`;
+    const id = extractDriveFileId(fileId);
+    if (ENV.publicAppUrl) {
+      return `${ENV.publicAppUrl}/img/${id}.jpg`;
+    }
+    return `https://drive.google.com/uc?export=download&id=${id}`;
   }
 
   /**
