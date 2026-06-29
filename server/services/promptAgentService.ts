@@ -216,8 +216,13 @@ class PromptAgentService {
   private buildLifestylePrompt(frame: FrameType, room: RoomType, style: StyleType): string {
     return [
       `${STYLE_DESCRIPTIONS[style]} applied to ${ROOM_DESCRIPTIONS[room]}.`,
-      `Refined editorial interior photography in the style of premium decor catalogs (think goquadros.com.br). Eye-level wide shot, 35mm lens, photorealistic. Warm golden sunlight streaming through a window, casting soft directional highlights on textiles, plants and surfaces. Thoughtful decorative details — a ceramic vase, a stack of design books, fresh greenery, woven textures. Sophisticated, lived-in atmosphere — never staged, never a showroom.`,
-      `The LARGE framed print is the absolute visual anchor of the composition, hung prominently centered on the main wall and occupying a generous portion of the wall area (roughly 30-45% of the wall height). It dominates the scene — never small, never decorative-only, always the focal point.`,
+      // Visual style — alinhado com fotos do goquadros.com.br: editorial real,
+      // não pode ter cara de AI/CG. Cores ricas, deep focus, luz direcional.
+      `Indistinguishable from a professional editorial interior shoot for a premium decor brand (reference: goquadros.com.br). MUST NOT look AI-generated, MUST NOT look 3D-rendered or CG. Photographic realism with crisp focus and natural film-like quality.`,
+      `Lighting: warm golden directional sunlight entering through a window, casting crisp soft shadows on the floor and adjacent surfaces. Avoid flat ambient lighting and avoid window overexposure — keep the highlights controlled.`,
+      `Color and depth: vivid saturated natural colors with rich contrast, deep tonal range (true blacks, clean whites), every plane crisp and in focus throughout the scene — deep focus, no shallow depth of field, no blurry background.`,
+      `Composition: 35mm lens, eye-level frontal shot positioned so the framed artwork fills roughly the upper half of the image. Thoughtful curated decor — a ceramic vase, a stack of design books, fresh greenery, woven textures, refined small objects — never clutter, never empty.`,
+      `The LARGE framed print is the absolute visual anchor, hung prominently centered on the main wall and occupying a generous portion of the wall area (roughly 30-45% of the wall height). It dominates the scene — never small, never decorative-only, always the focal point.`,
       `Frame: thin, ${FRAME_DESCRIPTIONS[frame]}, intentionally chosen to harmonize with the room's palette and decor.`,
       FINISH_CONSTRAINTS,
       ARTWORK_FIDELITY,
