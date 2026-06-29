@@ -370,7 +370,7 @@ export const catalogRouter = router({
         conditions.push(inArray(products.id, input.productIds));
       }
 
-      const rows = await db
+      const allRows = await db
         .select({
           p: products,
           c: categoryCodes,
@@ -379,6 +379,15 @@ export const catalogRouter = router({
         .leftJoin(categoryCodes, eq(products.categoryCodeId, categoryCodes.id))
         .where(and(...conditions))
         .orderBy(desc(products.aiPotencialVenda), desc(products.createdAt));
+
+      // Produtos sem imageUrl1 são ignorados: subir na Tray com células de
+      // imagem vazias resulta em produtos sem foto. Devolvemos a lista de
+      // skipped pra UI alertar a usuária — em geral significa que esses
+      // produtos ainda não passaram pelo pipeline de geração.
+      const rows = allRows.filter((r) => r.p.imageUrl1);
+      const skipped = allRows
+        .filter((r) => !r.p.imageUrl1)
+        .map((r) => ({ id: r.p.id, sku: r.p.sku, nome: r.p.nome }));
 
       // Layout EXATO do template oficial de importação da Tray (30 colunas).
       // Colunas 1 e 2 ("Código do produto (ID)" e "Código da categoria
@@ -487,6 +496,7 @@ export const catalogRouter = router({
         mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         base64,
         rows: rows.length,
+        skipped,
       };
     }),
 

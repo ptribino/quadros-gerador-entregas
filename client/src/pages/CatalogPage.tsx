@@ -105,7 +105,29 @@ export default function CatalogPage() {
   });
 
   const exportTrayMutation = trpc.catalog.exportTrayImport.useMutation({
-    onSuccess: downloadFromMutation,
+    onSuccess: (res) => {
+      const skipped = res.skipped ?? [];
+
+      // Se NENHUM produto tem imagem, não baixa planilha vazia — só avisa.
+      if (res.rows === 0) {
+        toast.error(
+          `Nenhum dos ${skipped.length} produtos selecionados tem imagens geradas. Rode "Gerar imagens" antes de exportar.`,
+          { duration: 8000 },
+        );
+        return;
+      }
+
+      downloadFromMutation(res);
+
+      if (skipped.length > 0) {
+        const preview = skipped.slice(0, 3).map((s) => s.sku).join(", ");
+        const suffix = skipped.length > 3 ? `, +${skipped.length - 3}` : "";
+        toast.warning(
+          `${skipped.length} produto(s) ignorado(s) por não ter imagens geradas: ${preview}${suffix}`,
+          { duration: 8000 },
+        );
+      }
+    },
     onError: (err) => toast.error(err.message),
   });
 
