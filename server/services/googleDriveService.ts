@@ -64,6 +64,81 @@ class GoogleDriveService {
    * Salva um arquivo no Google Drive do usuário
    * Usa multipart upload para enviar metadados + conteúdo juntos
    */
+  /**
+   * Faz upload sobrescrevendo: se já houver arquivo(s) com o mesmo `fileName`
+   * dentro de `folderId`, eles são movidos para a lixeira antes do novo upload.
+   *
+   * Usado pelo pipeline de catálogo quando o usuário re-gera um produto —
+   * sem isso, o Drive aceita arquivos com nome idêntico e a pasta acumula
+   * duplicatas (URL antiga continua válida mas as `imageUrl*` no DB apontam
+   * pra cópia nova; o produto fica com lixo visual no Drive).
+   */
+  async uploadFileReplacing(
+    accessToken: string,
+    fileName: string,
+    fileBuffer: Buffer,
+    mimeType: string,
+    folderId: string,
+  ): Promise<GoogleDriveFile> {
+    const existing = await this.findFilesByName(accessToken, fileName, folderId);
+    for (const f of existing) {
+      await this.deleteFile(accessToken, f.id).catch((err) => {
+        // Se falhar deletar o antigo, segue com upload — o estado fica
+        // duplicado mas não bloqueia o pipeline.
+        console.warn(`[GoogleDrive] Falha ao limpar duplicata ${f.id} (${fileName}):`, err);
+      });
+    }
+    return this.uploadFile(accessToken, fileName, fileBuffer, mimeType, folderId);
+  }
+
+  /**
+   * Busca arquivos por nome exato dentro de uma pasta. Útil para cleanup
+   * antes de re-upload (evitar duplicatas com mesmo nome).
+   */
+  async findFilesByName(
+    accessToken: string,
+    name: string,
+    folderId: string,
+  ): Promise<GoogleDriveFile[]> {
+    // Escape aspas simples no nome (Drive query syntax)
+    const safeName = name.replace(/'/g, "\\'");
+    const params = new URLSearchParams({
+      q: `'${folderId}' in parents and name='${safeName}' and trashed=false`,
+      fields: "files(id,name,mimeType,webViewLink)",
+      pageSize: "50",
+      supportsAllDrives: "true",
+      includeItemsFromAllDrives: "true",
+      corpora: "allDrives",
+    });
+
+    const response = await fetch(`${this.baseUrl}/files?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Drive findFilesByName failed (${response.status}): ${errorText}`);
+    }
+    const data = (await response.json()) as { files: GoogleDriveFile[] };
+    return data.files || [];
+  }
+
+  /**
+   * Move um arquivo para a lixeira do Drive (não apaga permanentemente).
+   */
+  async deleteFile(accessToken: string, fileId: string): Promise<void> {
+    const response = await fetch(
+      `${this.baseUrl}/files/${fileId}?supportsAllDrives=true`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+    if (!response.ok && response.status !== 404) {
+      const errorText = await response.text();
+      throw new Error(`Drive delete failed (${response.status}): ${errorText}`);
+    }
+  }
+
   async uploadFile(
     accessToken: string,
     fileName: string,

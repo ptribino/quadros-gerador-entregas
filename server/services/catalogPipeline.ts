@@ -199,9 +199,13 @@ export async function runForProduct(
   const originalMime = product.sourceDriveMimeType || "image/jpeg";
   const referenceDataUrl = `data:${originalMime};base64,${originalBuffer.toString("base64")}`;
 
+  // Nomes ESTÁVEIS — sem incluir frame/room/style sorteados, pra que o cleanup
+  // (uploadFileReplacing) consiga encontrar o arquivo antigo no caso de re-geração.
+  // A info do sorteio fica nos logs via onProgress (e em genError se falhar).
+
   // Salva o original sem resize (arquivo / impressão)
   const origExt = originalMime.includes("png") ? "png" : "jpg";
-  await googleDriveService.uploadFile(
+  await googleDriveService.uploadFileReplacing(
     accessToken,
     `${product.sku}-original.${origExt}`,
     originalBuffer,
@@ -212,7 +216,7 @@ export async function runForProduct(
   // Versão "web" da arte original (sem moldura/ambiente) — vira a imageUrl1
   // do produto na Tray. Mesmo pipeline de compressão usado pelos lifestyles.
   const originalWeb = await fitForEcommerce(originalBuffer);
-  const originalWebFile = await googleDriveService.uploadFile(
+  const originalWebFile = await googleDriveService.uploadFileReplacing(
     accessToken,
     `${product.sku}-web.jpg`,
     originalWeb.buffer,
@@ -238,9 +242,9 @@ export async function runForProduct(
   // ETAPA 2 — Lifestyle "regular"
   const lifeRaw = await generateLifestyle(frame, regularRoom, regularStyle, referenceDataUrl);
   const life = await fitForEcommerce(lifeRaw.buffer);
-  const lifeFile = await googleDriveService.uploadFile(
+  const lifeFile = await googleDriveService.uploadFileReplacing(
     accessToken,
-    `${product.sku}-lifestyle-${frame}-${regularRoom}-${regularStyle}.jpg`,
+    `${product.sku}-lifestyle-1.jpg`,
     life.buffer,
     life.mimeType,
     lifestyleFolder.id,
@@ -251,9 +255,9 @@ export async function runForProduct(
   // ETAPA 3 — Segunda lifestyle (mesmo pool de cômodos, sorteio independente)
   const proRaw = await generateLifestyle(frame, proRoom, proStyle, referenceDataUrl);
   const pro = await fitForEcommerce(proRaw.buffer);
-  const proFile = await googleDriveService.uploadFile(
+  const proFile = await googleDriveService.uploadFileReplacing(
     accessToken,
-    `${product.sku}-lifestyle-${frame}-${proRoom}-${proStyle}.jpg`,
+    `${product.sku}-lifestyle-2.jpg`,
     pro.buffer,
     pro.mimeType,
     lifestyleFolder.id,
@@ -264,9 +268,9 @@ export async function runForProduct(
   // ETAPA 4 — Mockup
   const mockRaw = await generateMockup(frame, referenceDataUrl);
   const mock = await fitForEcommerce(mockRaw.buffer);
-  const mockFile = await googleDriveService.uploadFile(
+  const mockFile = await googleDriveService.uploadFileReplacing(
     accessToken,
-    `${product.sku}-mockup-${frame}.jpg`,
+    `${product.sku}-mockup.jpg`,
     mock.buffer,
     mock.mimeType,
     mockupFolder.id,
