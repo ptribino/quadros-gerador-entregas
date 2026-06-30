@@ -738,12 +738,15 @@ export const catalogRouter = router({
         });
       }
 
-      // Layout oficial: a coluna A é vazia no template da Tray — preservada
-      // por compatibilidade.
+      // Layout 13 colunas começando em A. O template oficial da Tray
+      // (1480066_23486_Qtok_variacaoes.xls) parece ter uma coluna A vazia,
+      // mas isso é artefato: a Tray faz parsing por POSIÇÃO, então uma
+      // coluna A vazia desloca tudo e gera erros tipo "Invalid product"
+      // (lê coluna A → vazia → ID inválido) e "Estoque não numérico"
+      // (lê coluna G → 'Tamanho' string).
       const wbOut = new ExcelJS.Workbook();
       const wsOut = wbOut.addWorksheet("Worksheet");
       wsOut.columns = [
-        { header: "",                                       key: "_pad",        width: 4 },
         { header: "Código do produto (ID)",                 key: "produtoId",   width: 16 },
         { header: "Código da variação (ID)",                key: "variacaoId",  width: 16 },
         { header: "Nome da variação 1 (exemplo: Branco)",   key: "nome1",       width: 22 },
@@ -764,7 +767,6 @@ export const catalogRouter = router({
         for (const moldura of MOLDURAS) {
           for (const tam of TAMANHOS) {
             wsOut.addRow({
-              _pad: null,
               produtoId: trayId,
               variacaoId: null,
               nome1: moldura,
