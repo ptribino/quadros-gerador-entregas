@@ -747,11 +747,15 @@ export const catalogRouter = router({
       // Por isso forçamos numFmt "@" (texto) na coluna A e escrevemos o
       // trayId já como String. Mesma lógica para qualquer coluna onde a
       // Tray costuma tratar zero como vazio.
+      // OBS: "Código da variação (ID)" foi removido da saída. A doc da Tray
+      // diz que zero deveria gerar código automaticamente, mas na prática
+      // a importação rejeita tanto 0 quanto vazio com "Somente valor
+      // numérico permitido". Como a Tray identifica colunas pelo header,
+      // omitir essa coluna deixa ela auto-gerar o código sem validação.
       const wbOut = new ExcelJS.Workbook();
       const wsOut = wbOut.addWorksheet("Worksheet");
       wsOut.columns = [
         { header: "Código do produto (ID)",                 key: "produtoId",   width: 16 },
-        { header: "Código da variação (ID)",                key: "variacaoId",  width: 16 },
         { header: "Nome da variação 1 (exemplo: Branco)",   key: "nome1",       width: 22 },
         { header: "Nome da variação 2 (exemplo: GG)",       key: "nome2",       width: 18 },
         { header: "Tipo da variação 1 (exemplo: Cor)",      key: "tipo1",       width: 16 },
@@ -765,9 +769,9 @@ export const catalogRouter = router({
         { header: "Peso da variação (gramas)",              key: "peso",        width: 16 },
       ];
       wsOut.getRow(1).font = { bold: true };
-      // produtoId: empíricamente a Tray aceita string nessa coluna mesmo
-      // com a doc dizendo "Número" — célula numérica caiu em "É obrigatório
-      // informar o campo" em testes anteriores, então mantemos texto + "@".
+      // produtoId: célula numérica caiu em "É obrigatório informar o
+      // campo" em testes anteriores — manter como texto até confirmar
+      // que a versão atual da Tray aceitou (ver doc: tipo "Número").
       wsOut.getColumn("produtoId").numFmt = "@";
 
       for (const { trayId } of pairs) {
@@ -775,19 +779,14 @@ export const catalogRouter = router({
           for (const tam of TAMANHOS) {
             wsOut.addRow({
               produtoId: String(trayId),
-              // Docs Tray: "Deixando o campo como zero, iremos gerar um
-              // código automaticamente para o mesmo." Célula vazia (mesmo
-              // tipo texto) é rejeitada com "Somente valor numérico
-              // permitido"; 0 é o valor mágico de auto-geração.
-              variacaoId: 0,
               nome1: moldura,
               nome2: tam.nome,
               tipo1: "Cor Moldura",
               tipo2: "Tamanho",
               estoque: ESTOQUE_POR_VARIACAO,
               estoqueMin: ESTOQUE_MIN,
-              // Docs Tray: "Manter ativo, mas não permitir vendas" é um
-              // dos valores aceitos — bate com o default do produto pai.
+              // Doc Tray aceita "Manter ativo, mas não permitir vendas"
+              // entre os valores literais — bate com o default do produto.
               fimEstoque: "Manter ativo, mas não permitir vendas",
               altura: tam.altura,
               comprimento: tam.comprimento,
