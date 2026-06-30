@@ -765,24 +765,33 @@ export const catalogRouter = router({
         { header: "Peso da variação (gramas)",              key: "peso",        width: 16 },
       ];
       wsOut.getRow(1).font = { bold: true };
-      // Força formato de texto na coluna do ID do produto.
+      // Força formato de texto nas colunas onde a Tray rejeita células
+      // de tipo numérico-vazio:
+      //  - produtoId: célula numérica com valor preenchido cai em "É
+      //    obrigatório informar o campo" (Tray converte tipo errado pra null).
+      //  - variacaoId: célula numérica vazia cai em "Somente valor numérico
+      //    permitido" (validador acha que tem um número inválido lá).
       wsOut.getColumn("produtoId").numFmt = "@";
+      wsOut.getColumn("variacaoId").numFmt = "@";
+      wsOut.getColumn("fimEstoque").numFmt = "@";
 
       for (const { trayId } of pairs) {
         for (const moldura of MOLDURAS) {
           for (const tam of TAMANHOS) {
             wsOut.addRow({
-              // String + numFmt "@" garante que a célula sai como tipo
-              // texto no XLSX, que é o que o importador da Tray exige.
+              // String + numFmt "@" garante célula tipo texto no XLSX,
+              // que é o que o importador da Tray exige pros IDs.
               produtoId: String(trayId),
-              variacaoId: null,
+              // String vazia (não null) em colunas-texto: null faz
+              // ExcelJS gravar célula de tipo numérico vazio.
+              variacaoId: "",
               nome1: moldura,
               nome2: tam.nome,
               tipo1: "Cor Moldura",
               tipo2: "Tamanho",
               estoque: ESTOQUE_POR_VARIACAO,
               estoqueMin: ESTOQUE_MIN,
-              fimEstoque: null,
+              fimEstoque: "",
               altura: tam.altura,
               comprimento: tam.comprimento,
               largura: tam.largura,
