@@ -765,33 +765,30 @@ export const catalogRouter = router({
         { header: "Peso da variação (gramas)",              key: "peso",        width: 16 },
       ];
       wsOut.getRow(1).font = { bold: true };
-      // Força formato de texto nas colunas onde a Tray rejeita células
-      // de tipo numérico-vazio:
-      //  - produtoId: célula numérica com valor preenchido cai em "É
-      //    obrigatório informar o campo" (Tray converte tipo errado pra null).
-      //  - variacaoId: célula numérica vazia cai em "Somente valor numérico
-      //    permitido" (validador acha que tem um número inválido lá).
+      // produtoId: empíricamente a Tray aceita string nessa coluna mesmo
+      // com a doc dizendo "Número" — célula numérica caiu em "É obrigatório
+      // informar o campo" em testes anteriores, então mantemos texto + "@".
       wsOut.getColumn("produtoId").numFmt = "@";
-      wsOut.getColumn("variacaoId").numFmt = "@";
-      wsOut.getColumn("fimEstoque").numFmt = "@";
 
       for (const { trayId } of pairs) {
         for (const moldura of MOLDURAS) {
           for (const tam of TAMANHOS) {
             wsOut.addRow({
-              // String + numFmt "@" garante célula tipo texto no XLSX,
-              // que é o que o importador da Tray exige pros IDs.
               produtoId: String(trayId),
-              // String vazia (não null) em colunas-texto: null faz
-              // ExcelJS gravar célula de tipo numérico vazio.
-              variacaoId: "",
+              // Docs Tray: "Deixando o campo como zero, iremos gerar um
+              // código automaticamente para o mesmo." Célula vazia (mesmo
+              // tipo texto) é rejeitada com "Somente valor numérico
+              // permitido"; 0 é o valor mágico de auto-geração.
+              variacaoId: 0,
               nome1: moldura,
               nome2: tam.nome,
               tipo1: "Cor Moldura",
               tipo2: "Tamanho",
               estoque: ESTOQUE_POR_VARIACAO,
               estoqueMin: ESTOQUE_MIN,
-              fimEstoque: "",
+              // Docs Tray: "Manter ativo, mas não permitir vendas" é um
+              // dos valores aceitos — bate com o default do produto pai.
+              fimEstoque: "Manter ativo, mas não permitir vendas",
               altura: tam.altura,
               comprimento: tam.comprimento,
               largura: tam.largura,
