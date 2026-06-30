@@ -101,6 +101,7 @@ async function processOne(): Promise<boolean> {
         nome: product.nome,
         sourceDriveFileId: product.sourceDriveFileId,
         categoryCode3,
+        aiPalavrasChave: product.aiPalavrasChave,
       },
       { accessToken },
       async (step, message) => {

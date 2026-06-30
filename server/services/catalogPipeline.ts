@@ -31,6 +31,30 @@ export interface PipelineProduct {
   sourceDriveMimeType?: string;
   /** code3 da categoria (ex: "INF", "BBD"). Usado pra escolher cômodos compatíveis. */
   categoryCode3?: string | null;
+  /** Palavras-chave da curadoria por IA. Usado pra detectar artes imponentes (águia/leão/lobo) que pedem cenário de escritório. */
+  aiPalavrasChave?: string | null;
+}
+
+/**
+ * Termos que sinalizam arte imponente/séria — quando aparecem nas palavras-chave
+ * da IA, o pipeline força ao menos UMA das lifestyles em office (escritório
+ * fica muito melhor pra esses temas do que sala/quarto aconchegante).
+ */
+const POWERFUL_SUBJECT_KEYWORDS: readonly string[] = [
+  "águia", "aguia", "eagle",
+  "leão", "leao", "lion", "lioness",
+  "lobo", "wolf",
+  "coruja", "owl",
+  "gavião", "gaviao", "hawk", "falcão", "falcao", "falcon",
+  "tigre", "tiger",
+  "pantera", "panteira", "panther",
+  "jaguar", "onça", "onca",
+];
+
+function prefersOfficeScene(aiPalavrasChave: string | null | undefined): boolean {
+  if (!aiPalavrasChave) return false;
+  const text = aiPalavrasChave.toLowerCase();
+  return POWERFUL_SUBJECT_KEYWORDS.some((kw) => text.includes(kw));
 }
 
 export interface PipelineResult {
@@ -242,7 +266,12 @@ export async function runForProduct(
   // só 1 cômodo elegível, os dois lifestyles caem no mesmo cômodo — o estilo
   // distingue.
   const regularRoom: RoomType = pickRandom(eligibleRooms);
-  const proRoom: RoomType = pickRandom(eligibleRooms);
+  // Arte de animal imponente (águia, leão, lobo etc.) vai pra office na
+  // segunda lifestyle quando office estiver elegível. Cobre o caso de quadros
+  // que ficam estranhos em sala/quarto aconchegante e melhor em escritório.
+  const forceOffice =
+    prefersOfficeScene(product.aiPalavrasChave) && eligibleRooms.includes("office");
+  const proRoom: RoomType = forceOffice ? "office" : pickRandom(eligibleRooms);
 
   // ETAPA 2 — Lifestyle "regular"
   const lifeRaw = await generateLifestyle(frame, regularRoom, regularStyle, referenceDataUrl);
