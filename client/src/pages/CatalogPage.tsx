@@ -232,10 +232,11 @@ export default function CatalogPage() {
   const handleSelectCategory = (id: string) => {
     setCategoryId(id);
     const cat = categoriesQuery.data?.find((c) => c.id === Number(id));
-    if (cat) {
-      const folder = foldersQuery.data?.find((f) => f.name === cat.folderName);
-      if (folder) setFolderId(folder.id);
-    }
+    const folder = cat && foldersQuery.data?.find((f) => f.name === cat.folderName);
+    // Preenche com a pasta mapeada quando existe; caso contrário limpa o campo
+    // pra deixar claro que o usuário precisa colar o folderId manualmente
+    // (categorias marcadas "(sem pasta)").
+    setFolderId(folder ? folder.id : "");
   };
 
   const toggleSelect = (id: number) => {
