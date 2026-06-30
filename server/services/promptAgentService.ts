@@ -117,7 +117,10 @@ const FINISH_CONSTRAINTS = [
   'MATERIAL: Print is on matte sublimation paper (no canvas, no glossy varnish).',
   'NO GLASS: the frame has NO glass overlay, NO acrylic, NO clear cover of any kind.',
   'NO REFLECTIONS: no specular highlights, no glare, no shiny surface on the artwork.',
-  'NO MAT BORDER: no white passe-partout, no inner mat — the artwork fills the frame edge to edge.',
+  // Phrased positively because the model was ignoring the negative "no mat border"
+  // version and still painting a thin white inner border (filete/passe-partout).
+  // Describe the desired construction first, then reinforce with constraints.
+  'FRAME CONSTRUCTION: The printed artwork fills the entire frame opening, edge-to-edge with the wood molding. The inner edge of the wood touches the printed image directly with zero gap. Frame opening dimensions equal the print dimensions exactly. Contemporary frameless gallery look. No spacer, no mat board, no inner white border, no passe-partout, no white trim line between the print and the wood.',
 ].join(' ');
 
 /**
@@ -234,7 +237,7 @@ class PromptAgentService {
   private buildMockupPrompt(frame: FrameType): string {
     return [
       `Clean e-commerce product mockup. LARGE framed print centered on a plain off-white or very light warm gray wall, occupying the majority of the visible composition so the artwork dominates the frame.`,
-      `Frame: thin ${FRAME_DESCRIPTIONS[frame]}. The artwork goes ALL THE WAY to the frame edge — no white mat, no passe-partout, no border between artwork and frame.`,
+      `Frame: thin ${FRAME_DESCRIPTIONS[frame]} molding, with the printed artwork mounted flush against the inner edge of the wood. The print extends from one inner edge of the frame to the other with zero gap — wood touches print directly on all four sides.`,
       FINISH_CONSTRAINTS,
       `Straight frontal view, perfectly centered. Soft uniform studio lighting from the front-left, very subtle shadow on the right side to give depth, no harsh shadows. Minimalist premium product photography.`,
       ARTWORK_FIDELITY,
