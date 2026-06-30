@@ -738,12 +738,15 @@ export const catalogRouter = router({
         });
       }
 
-      // Layout 13 colunas começando em A. O template oficial da Tray
-      // (1480066_23486_Qtok_variacaoes.xls) parece ter uma coluna A vazia,
-      // mas isso é artefato: a Tray faz parsing por POSIÇÃO, então uma
-      // coluna A vazia desloca tudo e gera erros tipo "Invalid product"
-      // (lê coluna A → vazia → ID inválido) e "Estoque não numérico"
-      // (lê coluna G → 'Tamanho' string).
+      // Layout 13 colunas começando em A. A Tray faz parsing por POSIÇÃO
+      // (não pelo nome do header), então qualquer pad inicial desloca tudo.
+      //
+      // Tipos das células importam: a validação da Tray exige que
+      // "Código do produto (ID)" seja string, não número — célula numérica
+      // dispara "É obrigatório informar o campo" mesmo com valor preenchido.
+      // Por isso forçamos numFmt "@" (texto) na coluna A e escrevemos o
+      // trayId já como String. Mesma lógica para qualquer coluna onde a
+      // Tray costuma tratar zero como vazio.
       const wbOut = new ExcelJS.Workbook();
       const wsOut = wbOut.addWorksheet("Worksheet");
       wsOut.columns = [
@@ -762,12 +765,16 @@ export const catalogRouter = router({
         { header: "Peso da variação (gramas)",              key: "peso",        width: 16 },
       ];
       wsOut.getRow(1).font = { bold: true };
+      // Força formato de texto na coluna do ID do produto.
+      wsOut.getColumn("produtoId").numFmt = "@";
 
       for (const { trayId } of pairs) {
         for (const moldura of MOLDURAS) {
           for (const tam of TAMANHOS) {
             wsOut.addRow({
-              produtoId: trayId,
+              // String + numFmt "@" garante que a célula sai como tipo
+              // texto no XLSX, que é o que o importador da Tray exige.
+              produtoId: String(trayId),
               variacaoId: null,
               nome1: moldura,
               nome2: tam.nome,
