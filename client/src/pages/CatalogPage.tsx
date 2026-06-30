@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -103,6 +103,44 @@ export default function CatalogPage() {
     onSuccess: downloadFromMutation,
     onError: (err) => toast.error(err.message),
   });
+
+  const trayVariationsInputRef = useRef<HTMLInputElement>(null);
+  const exportTrayVariationsMutation =
+    trpc.catalog.exportTrayVariations.useMutation({
+      onSuccess: (res) => {
+        downloadFromMutation({
+          fileName: res.fileName,
+          mimeType: res.mimeType,
+          base64: res.base64,
+          rows: res.rows,
+        });
+        toast.success(
+          `${res.products} produto(s) → ${res.rows} variações geradas (32 por produto).`,
+          { duration: 6000 },
+        );
+        if (res.skipped.length > 0) {
+          const preview = res.skipped.slice(0, 3).join(", ");
+          const suffix =
+            res.skipped.length > 3 ? `, +${res.skipped.length - 3}` : "";
+          toast.warning(
+            `${res.skipped.length} SKU(s) sem 'Código do produto (ID)' na planilha: ${preview}${suffix}`,
+            { duration: 8000 },
+          );
+        }
+      },
+      onError: (err) => toast.error(err.message),
+    });
+
+  const handleVariationsFilePick = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      exportTrayVariationsMutation.mutate({ fileBase64: dataUrl });
+    };
+    reader.onerror = () => toast.error("Erro ao ler o arquivo");
+    reader.readAsDataURL(file);
+  };
 
   const exportTrayMutation = trpc.catalog.exportTrayImport.useMutation({
     onSuccess: (res) => {
@@ -464,6 +502,27 @@ export default function CatalogPage() {
               >
                 {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
               </Button>
+              <input
+                ref={trayVariationsInputRef}
+                type="file"
+                accept=".xlsx"
+                className="hidden"
+                onChange={(e) => {
+                  handleVariationsFilePick(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={exportTrayVariationsMutation.isPending}
+                onClick={() => trayVariationsInputRef.current?.click()}
+                title="Suba a planilha de produtos que a Tray exporta após a importação (com a coluna 'Código do produto (ID)' preenchida). Gera 32 variações por produto: 4 molduras × 8 tamanhos."
+              >
+                {exportTrayVariationsMutation.isPending
+                  ? "..."
+                  : "Gerar variações"}
+              </Button>
             </div>
           </div>
           <div className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900 ring-1 ring-blue-100">
@@ -471,7 +530,8 @@ export default function CatalogPage() {
             (1) marque os produtos com <kbd className="rounded bg-white px-1 py-0.5 ring-1 ring-blue-200">checkbox</kbd>,{" "}
             (2) clique <strong>Aprovar</strong>,{" "}
             (3) com os mesmos produtos ainda marcados, clique <strong>Gerar imagens</strong> — o sistema gera 3 imagens por produto (~1.5 min cada) e salva na sua pasta do Drive.{" "}
-            (4) Quando a coluna GERAÇÃO mostrar <strong className="text-emerald-600">✅ pronto</strong>, clique <strong>Exportar Tray</strong> e importe na sua loja.
+            (4) Quando a coluna GERAÇÃO mostrar <strong className="text-emerald-600">✅ pronto</strong>, clique <strong>Exportar Tray</strong> e importe na sua loja.{" "}
+            (5) Depois da importação, exporte do painel da Tray a planilha de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com 32 variações por produto (4 molduras × 8 tamanhos) pronto pra importar.
           </div>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">

@@ -501,6 +501,191 @@ export const catalogRouter = router({
     }),
 
   /**
+   * Gera planilha de variações Tray a partir do XLSX de produtos exportado
+   * pela Tray (com a coluna "Código do produto (ID)" preenchida).
+   *
+   * Fluxo (round-trip):
+   *  1. Usuária importa produtos via `exportTrayImport` → Tray atribui IDs.
+   *  2. Usuária baixa do painel da Tray a planilha de produtos com os IDs.
+   *  3. Aqui: lemos esse XLSX, casamos SKU (coluna "Referência") → ID Tray,
+   *     e emitimos 32 linhas por produto (4 molduras × 8 tamanhos) no
+   *     layout do template oficial de variações da Tray (14 colunas: uma
+   *     coluna A vazia, depois Código do produto, Código da variação,
+   *     Nome 1, Nome 2, Tipo 1, Tipo 2, Estoque, Estoque mínimo, Quando
+   *     acabar, Altura, Comprimento, Largura, Peso).
+   */
+  exportTrayVariations: protectedProcedure
+    .input(z.object({ fileBase64: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      // Matrix fixo: 4 molduras × 8 tamanhos = 32 variações por produto.
+      // Altura constante 9cm; largura e comprimento da embalagem crescem
+      // com o tamanho do quadro (tabela operacional da Qtok Quadros).
+      const MOLDURAS = [
+        "Amadeirado claro",
+        "Amadeirado escuro",
+        "Branca",
+        "Preta",
+      ] as const;
+      type SizeRow = {
+        nome: string;
+        altura: number;
+        largura: number;
+        comprimento: number;
+        pesoGramas: number;
+      };
+      const TAMANHOS: SizeRow[] = [
+        { nome: "60cm x 40cm",   altura: 9, largura: 45,  comprimento: 65,  pesoGramas: 1500 },
+        { nome: "70cm x 50cm",   altura: 9, largura: 55,  comprimento: 75,  pesoGramas: 2000 },
+        { nome: "80cm x 55cm",   altura: 9, largura: 60,  comprimento: 85,  pesoGramas: 2500 },
+        { nome: "90cm x 60cm",   altura: 9, largura: 65,  comprimento: 95,  pesoGramas: 3000 },
+        { nome: "100cm x 70cm",  altura: 9, largura: 75,  comprimento: 105, pesoGramas: 3500 },
+        { nome: "120cm x 80cm",  altura: 9, largura: 85,  comprimento: 125, pesoGramas: 4500 },
+        { nome: "150cm x 100cm", altura: 9, largura: 105, comprimento: 155, pesoGramas: 6000 },
+        { nome: "160cm x 110cm", altura: 9, largura: 115, comprimento: 165, pesoGramas: 7000 },
+      ];
+      const ESTOQUE_POR_VARIACAO = 99;
+      const ESTOQUE_MIN = 0;
+
+      // Aceita data URL (data:...;base64,XXX) ou base64 puro.
+      const b64 = input.fileBase64.includes(",")
+        ? input.fileBase64.slice(input.fileBase64.indexOf(",") + 1)
+        : input.fileBase64;
+      const buffer = Buffer.from(b64, "base64");
+
+      const wbIn = new ExcelJS.Workbook();
+      try {
+        // ExcelJS aceita ArrayBuffer/Uint8Array; tipos do node 22 e ExcelJS
+        // divergem no Buffer<ArrayBufferLike> genérico, então passamos o
+        // ArrayBuffer subjacente.
+        const ab = buffer.buffer.slice(
+          buffer.byteOffset,
+          buffer.byteOffset + buffer.byteLength,
+        ) as ArrayBuffer;
+        await wbIn.xlsx.load(ab);
+      } catch {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Arquivo inválido. Exporte a planilha de produtos no painel da Tray (XLSX) e tente novamente.",
+        });
+      }
+      const ws = wbIn.worksheets[0];
+      if (!ws) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Planilha vazia — nenhuma aba encontrada.",
+        });
+      }
+
+      // Localiza colunas por header — Tray pode mudar a ordem entre versões
+      // do template; nunca confiar em índice fixo.
+      const headerRow = ws.getRow(1);
+      let idCol = -1;
+      let refCol = -1;
+      headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        const text = String(cell.value ?? "").trim().toLowerCase();
+        if (text === "código do produto (id)") idCol = colNumber;
+        if (text.startsWith("referência")) refCol = colNumber;
+      });
+      if (idCol === -1 || refCol === -1) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Não achei as colunas 'Código do produto (ID)' e 'Referência' no cabeçalho. Confirme que é a planilha de produtos exportada pela Tray.",
+        });
+      }
+
+      // Pares (sku, trayId). Linhas sem ID são puladas — produtos que ainda
+      // não foram importados na Tray não têm ID.
+      type Pair = { sku: string; trayId: number };
+      const pairs: Pair[] = [];
+      const skippedSkus: string[] = [];
+      for (let r = 2; r <= ws.rowCount; r++) {
+        const row = ws.getRow(r);
+        const skuRaw = row.getCell(refCol).value;
+        const idRaw = row.getCell(idCol).value;
+        const sku = String(skuRaw ?? "").trim();
+        if (!sku) continue;
+        const idNum =
+          typeof idRaw === "number"
+            ? idRaw
+            : typeof idRaw === "string"
+              ? Number(idRaw.trim())
+              : NaN;
+        if (!Number.isFinite(idNum) || idNum <= 0) {
+          skippedSkus.push(sku);
+          continue;
+        }
+        pairs.push({ sku, trayId: idNum });
+      }
+      if (pairs.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Nenhum produto com 'Código do produto (ID)' preenchido. Importe os produtos na Tray primeiro, depois exporte de novo.",
+        });
+      }
+
+      // Layout oficial: a coluna A é vazia no template da Tray — preservada
+      // por compatibilidade.
+      const wbOut = new ExcelJS.Workbook();
+      const wsOut = wbOut.addWorksheet("Worksheet");
+      wsOut.columns = [
+        { header: "",                                       key: "_pad",        width: 4 },
+        { header: "Código do produto (ID)",                 key: "produtoId",   width: 16 },
+        { header: "Código da variação (ID)",                key: "variacaoId",  width: 16 },
+        { header: "Nome da variação 1 (exemplo: Branco)",   key: "nome1",       width: 22 },
+        { header: "Nome da variação 2 (exemplo: GG)",       key: "nome2",       width: 18 },
+        { header: "Tipo da variação 1 (exemplo: Cor)",      key: "tipo1",       width: 16 },
+        { header: "Tipo da variação 2 (exemplo: Tamanho)",  key: "tipo2",       width: 14 },
+        { header: "Estoque da variação",                    key: "estoque",     width: 12 },
+        { header: "Estoque mínimo para aviso",              key: "estoqueMin",  width: 14 },
+        { header: "Quando acabar o estoque",                key: "fimEstoque",  width: 16 },
+        { header: "Altura (cm)",                            key: "altura",      width: 12 },
+        { header: "Comprimento (cm)",                       key: "comprimento", width: 14 },
+        { header: "Largura (cm)",                           key: "largura",     width: 12 },
+        { header: "Peso da variação (gramas)",              key: "peso",        width: 16 },
+      ];
+      wsOut.getRow(1).font = { bold: true };
+
+      for (const { trayId } of pairs) {
+        for (const moldura of MOLDURAS) {
+          for (const tam of TAMANHOS) {
+            wsOut.addRow({
+              _pad: null,
+              produtoId: trayId,
+              variacaoId: null,
+              nome1: moldura,
+              nome2: tam.nome,
+              tipo1: "Cor Moldura",
+              tipo2: "Tamanho",
+              estoque: ESTOQUE_POR_VARIACAO,
+              estoqueMin: ESTOQUE_MIN,
+              fimEstoque: null,
+              altura: tam.altura,
+              comprimento: tam.comprimento,
+              largura: tam.largura,
+              peso: tam.pesoGramas,
+            });
+          }
+        }
+      }
+
+      const out = await wbOut.xlsx.writeBuffer();
+      const base64 = Buffer.from(out).toString("base64");
+      const fileName = `Tray_Variacoes_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      return {
+        fileName,
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        base64,
+        rows: pairs.length * MOLDURAS.length * TAMANHOS.length,
+        products: pairs.length,
+        skipped: skippedSkus,
+      };
+    }),
+
+  /**
    * Enfileira produtos aprovados para geração de imagens.
    * O worker in-process (catalogWorker) consome a fila em background.
    */
