@@ -505,7 +505,7 @@ export default function CatalogPage() {
               <input
                 ref={trayVariationsInputRef}
                 type="file"
-                accept=".xlsx"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 className="hidden"
                 onChange={(e) => {
                   handleVariationsFilePick(e.target.files?.[0]);
@@ -517,7 +517,7 @@ export default function CatalogPage() {
                 variant="outline"
                 disabled={exportTrayVariationsMutation.isPending}
                 onClick={() => trayVariationsInputRef.current?.click()}
-                title="Suba a planilha de produtos que a Tray exporta após a importação (com a coluna 'Código do produto (ID)' preenchida). Gera 32 variações por produto: 4 molduras × 8 tamanhos."
+                title="Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 32 variações por produto: 4 molduras × 8 tamanhos."
               >
                 {exportTrayVariationsMutation.isPending
                   ? "..."
@@ -531,7 +531,7 @@ export default function CatalogPage() {
             (2) clique <strong>Aprovar</strong>,{" "}
             (3) com os mesmos produtos ainda marcados, clique <strong>Gerar imagens</strong> — o sistema gera 3 imagens por produto (~1.5 min cada) e salva na sua pasta do Drive.{" "}
             (4) Quando a coluna GERAÇÃO mostrar <strong className="text-emerald-600">✅ pronto</strong>, clique <strong>Exportar Tray</strong> e importe na sua loja.{" "}
-            (5) Depois da importação, exporte do painel da Tray a planilha de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com 32 variações por produto (4 molduras × 8 tamanhos) pronto pra importar.
+            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com 32 variações por produto (4 molduras × 8 tamanhos) pronto pra importar.
           </div>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">

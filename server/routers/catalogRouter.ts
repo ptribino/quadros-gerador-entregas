@@ -21,6 +21,57 @@ async function requireAccessToken(openId: string): Promise<string> {
   return accessToken;
 }
 
+/**
+ * Parser CSV simples para o formato exportado pela Tray:
+ *  - separador ';'
+ *  - campos entre aspas duplas; '""' escapa uma aspa literal
+ *  - quebras de linha dentro de aspas fazem parte do campo (HTML da descrição)
+ * Retorna a matriz de strings (uma linha por registro).
+ */
+function parseCsvSemicolon(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ";") {
+        row.push(field);
+        field = "";
+      } else if (ch === "\r") {
+        // ignora, espera o \n
+      } else if (ch === "\n") {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = "";
+      } else {
+        field += ch;
+      }
+    }
+  }
+  // último campo / linha sem newline final
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
 async function requireDb() {
   const db = await getDb();
   if (!db) {
@@ -552,77 +603,138 @@ export const catalogRouter = router({
         : input.fileBase64;
       const buffer = Buffer.from(b64, "base64");
 
-      const wbIn = new ExcelJS.Workbook();
-      try {
-        // ExcelJS aceita ArrayBuffer/Uint8Array; tipos do node 22 e ExcelJS
-        // divergem no Buffer<ArrayBufferLike> genérico, então passamos o
-        // ArrayBuffer subjacente.
-        const ab = buffer.buffer.slice(
-          buffer.byteOffset,
-          buffer.byteOffset + buffer.byteLength,
-        ) as ArrayBuffer;
-        await wbIn.xlsx.load(ab);
-      } catch {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "Arquivo inválido. Exporte a planilha de produtos no painel da Tray (XLSX) e tente novamente.",
-        });
-      }
-      const ws = wbIn.worksheets[0];
-      if (!ws) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Planilha vazia — nenhuma aba encontrada.",
-        });
-      }
+      // Tray hoje exporta produtos em CSV (separador ';', encoding cp1252).
+      // A planilha de produtos do template oficial pode vir em XLSX também,
+      // então sniffamos pelo magic number do ZIP (XLSX é um zip).
+      const isXlsx =
+        buffer.length >= 4 &&
+        buffer[0] === 0x50 &&
+        buffer[1] === 0x4b &&
+        (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07);
 
-      // Localiza colunas por header — Tray pode mudar a ordem entre versões
-      // do template; nunca confiar em índice fixo.
-      const headerRow = ws.getRow(1);
-      let idCol = -1;
-      let refCol = -1;
-      headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-        const text = String(cell.value ?? "").trim().toLowerCase();
-        if (text === "código do produto (id)") idCol = colNumber;
-        if (text.startsWith("referência")) refCol = colNumber;
-      });
-      if (idCol === -1 || refCol === -1) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "Não achei as colunas 'Código do produto (ID)' e 'Referência' no cabeçalho. Confirme que é a planilha de produtos exportada pela Tray.",
-        });
-      }
+      // Localiza as colunas por header — match flexível porque o nome
+      // muda entre o CSV de exportação ("Código produto", "Referência")
+      // e o XLSX de importação ("Código do produto (ID)", "Referência
+      // (código fornecedor)").
+      const isIdHeader = (s: string) => {
+        const t = s.trim().toLowerCase();
+        return t === "código produto" || t === "código do produto (id)";
+      };
+      const isRefHeader = (s: string) => s.trim().toLowerCase().startsWith("referência");
 
-      // Pares (sku, trayId). Linhas sem ID são puladas — produtos que ainda
-      // não foram importados na Tray não têm ID.
       type Pair = { sku: string; trayId: number };
       const pairs: Pair[] = [];
       const skippedSkus: string[] = [];
-      for (let r = 2; r <= ws.rowCount; r++) {
-        const row = ws.getRow(r);
-        const skuRaw = row.getCell(refCol).value;
-        const idRaw = row.getCell(idCol).value;
-        const sku = String(skuRaw ?? "").trim();
-        if (!sku) continue;
-        const idNum =
-          typeof idRaw === "number"
-            ? idRaw
-            : typeof idRaw === "string"
-              ? Number(idRaw.trim())
-              : NaN;
-        if (!Number.isFinite(idNum) || idNum <= 0) {
-          skippedSkus.push(sku);
-          continue;
+
+      if (isXlsx) {
+        const wbIn = new ExcelJS.Workbook();
+        try {
+          // ExcelJS aceita ArrayBuffer/Uint8Array; tipos do node 22 e ExcelJS
+          // divergem no Buffer<ArrayBufferLike> genérico, então passamos o
+          // ArrayBuffer subjacente.
+          const ab = buffer.buffer.slice(
+            buffer.byteOffset,
+            buffer.byteOffset + buffer.byteLength,
+          ) as ArrayBuffer;
+          await wbIn.xlsx.load(ab);
+        } catch {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Arquivo XLSX inválido. Exporte a planilha de produtos no painel da Tray (CSV ou XLSX) e tente novamente.",
+          });
         }
-        pairs.push({ sku, trayId: idNum });
+        const ws = wbIn.worksheets[0];
+        if (!ws) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Planilha vazia — nenhuma aba encontrada.",
+          });
+        }
+        const headerRow = ws.getRow(1);
+        let idCol = -1;
+        let refCol = -1;
+        headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+          const text = String(cell.value ?? "");
+          if (isIdHeader(text)) idCol = colNumber;
+          if (isRefHeader(text)) refCol = colNumber;
+        });
+        if (idCol === -1 || refCol === -1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Não achei as colunas 'Código produto' e 'Referência' no cabeçalho. Confirme que é a planilha de produtos exportada pela Tray.",
+          });
+        }
+        for (let r = 2; r <= ws.rowCount; r++) {
+          const row = ws.getRow(r);
+          const sku = String(row.getCell(refCol).value ?? "").trim();
+          const idRaw = row.getCell(idCol).value;
+          if (!sku) continue;
+          const idNum =
+            typeof idRaw === "number"
+              ? idRaw
+              : typeof idRaw === "string"
+                ? Number(idRaw.trim())
+                : NaN;
+          if (!Number.isFinite(idNum) || idNum <= 0) {
+            skippedSkus.push(sku);
+            continue;
+          }
+          pairs.push({ sku, trayId: idNum });
+        }
+      } else {
+        // CSV da Tray: encoding cp1252 (windows-1252), separador ';',
+        // campos podem estar entre aspas duplas e conter '"' escapado
+        // como '""' e quebras de linha dentro do HTML da descrição.
+        let text: string;
+        try {
+          text = new TextDecoder("windows-1252").decode(buffer);
+        } catch {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Não consegui ler o arquivo. Use o CSV ou XLSX de produtos exportado pelo painel da Tray.",
+          });
+        }
+        // BOM UTF-8 caso a Tray exporte em UTF-8 em alguma versão.
+        if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+
+        const rows = parseCsvSemicolon(text);
+        if (rows.length < 2) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "CSV sem linhas de dados. Verifique se exportou o arquivo certo.",
+          });
+        }
+        const header = rows[0];
+        const idCol = header.findIndex(isIdHeader);
+        const refCol = header.findIndex(isRefHeader);
+        if (idCol === -1 || refCol === -1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Não achei as colunas 'Código produto' e 'Referência' no cabeçalho. Confirme que é a planilha de produtos exportada pela Tray.",
+          });
+        }
+        for (let r = 1; r < rows.length; r++) {
+          const row = rows[r];
+          const sku = (row[refCol] ?? "").trim();
+          if (!sku) continue;
+          const idNum = Number((row[idCol] ?? "").trim());
+          if (!Number.isFinite(idNum) || idNum <= 0) {
+            skippedSkus.push(sku);
+            continue;
+          }
+          pairs.push({ sku, trayId: idNum });
+        }
       }
+
       if (pairs.length === 0) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message:
-            "Nenhum produto com 'Código do produto (ID)' preenchido. Importe os produtos na Tray primeiro, depois exporte de novo.",
+            "Nenhum produto com 'Código produto' preenchido. Importe os produtos na Tray primeiro, depois exporte de novo.",
         });
       }
 
