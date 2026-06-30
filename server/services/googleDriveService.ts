@@ -240,14 +240,18 @@ class GoogleDriveService {
       fields: 'files(id,name,mimeType,webViewLink,shortcutDetails)',
       pageSize: '100',
       orderBy: 'name',
-      // Necessário pra enxergar subpastas em shared drives — sem isso a API
-      // retorna 0 quando navegamos dentro de "Compartilhados comigo" (caso
-      // do banco de imagens da GN Packz).
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
-      corpora: 'allDrives',
       q,
     });
+    // `corpora: allDrives` é necessário só quando navegamos DENTRO de uma
+    // pasta específica (recursão em shared drives, ex: banco GN Packz).
+    // Na listagem raiz (sem parent), expandir pra "allDrives" puxa pastas
+    // soltas dos shared drives externos onde a usuária é membro, poluindo
+    // o seletor com itens órfãos.
+    if (parentFolderId) {
+      params.set('corpora', 'allDrives');
+    }
 
     const response = await fetch(`${this.baseUrl}/files?${params}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
