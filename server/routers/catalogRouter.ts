@@ -560,10 +560,10 @@ export const catalogRouter = router({
    *  2. Usuária baixa do painel da Tray a planilha de produtos com os IDs.
    *  3. Aqui: lemos esse XLSX, casamos SKU (coluna "Referência") → ID Tray,
    *     e emitimos 32 linhas por produto (4 molduras × 8 tamanhos) no
-   *     layout do template oficial de variações da Tray (14 colunas: uma
-   *     coluna A vazia, depois Código do produto, Código da variação,
-   *     Nome 1, Nome 2, Tipo 1, Tipo 2, Estoque, Estoque mínimo, Quando
-   *     acabar, Altura, Comprimento, Largura, Peso).
+   *     layout do Modelo_Variacoes.xls oficial da Tray (18 colunas:
+   *     Código da variação (ID), Código de referência do produto,
+   *     Tipo 1, Nome 1, Tipo 2, Nome 2, Preço, Estoque, Peso, Altura,
+   *     Largura, Comprimento, EAN, e 5 URLs de imagem).
    */
   exportTrayVariations: protectedProcedure
     .input(z.object({ fileBase64: z.string().min(1) }))
@@ -595,7 +595,6 @@ export const catalogRouter = router({
         { nome: "160cm x 110cm", altura: 9, largura: 115, comprimento: 165, pesoGramas: 7000 },
       ];
       const ESTOQUE_POR_VARIACAO = 99;
-      const ESTOQUE_MIN = 0;
 
       // Aceita data URL (data:...;base64,XXX) ou base64 puro.
       const b64 = input.fileBase64.includes(",")
@@ -738,60 +737,74 @@ export const catalogRouter = router({
         });
       }
 
-      // Layout 13 colunas começando em A. A Tray faz parsing por POSIÇÃO
-      // (não pelo nome do header), então qualquer pad inicial desloca tudo.
+      // Layout do Modelo_Variacoes.xls oficial da Tray, na ordem exata
+      // esperada pelo importador (que parseia por POSIÇÃO, não por header).
+      // Iterações anteriores erraram tentando col A = "Código do produto
+      // (ID)"; na verdade col A é "Código da variação (ID)" (numérico) e
+      // o vínculo com o produto pai vai em col B como SKU texto ("Código
+      // de referência do produto"). Todos os erros "Somente valor numérico
+      // permitido" no col A vinham de ter jogado texto (nome de moldura
+      // ou SKU de produto) onde a Tray espera o ID numérico da variação.
       //
-      // Tipos das células importam: a validação da Tray exige que
-      // "Código do produto (ID)" seja string, não número — célula numérica
-      // dispara "É obrigatório informar o campo" mesmo com valor preenchido.
-      // Por isso forçamos numFmt "@" (texto) na coluna A e escrevemos o
-      // trayId já como String. Mesma lógica para qualquer coluna onde a
-      // Tray costuma tratar zero como vazio.
-      // OBS: "Código da variação (ID)" foi removido da saída. A doc da Tray
-      // diz que zero deveria gerar código automaticamente, mas na prática
-      // a importação rejeita tanto 0 quanto vazio com "Somente valor
-      // numérico permitido". Como a Tray identifica colunas pelo header,
-      // omitir essa coluna deixa ela auto-gerar o código sem validação.
+      // Colunas Preço, EAN e URLs de imagem ficam em branco: a doc da
+      // Tray diz que valores em branco herdam do produto pai; a usuária
+      // completa depois no painel. Estoque mínimo e "Quando acabar" não
+      // existem nesse template — foram inferidas erroneamente.
       const wbOut = new ExcelJS.Workbook();
       const wsOut = wbOut.addWorksheet("Worksheet");
       wsOut.columns = [
-        { header: "Código do produto (ID)",                 key: "produtoId",   width: 16 },
-        { header: "Nome da variação 1 (exemplo: Branco)",   key: "nome1",       width: 22 },
-        { header: "Nome da variação 2 (exemplo: GG)",       key: "nome2",       width: 18 },
-        { header: "Tipo da variação 1 (exemplo: Cor)",      key: "tipo1",       width: 16 },
-        { header: "Tipo da variação 2 (exemplo: Tamanho)",  key: "tipo2",       width: 14 },
-        { header: "Estoque da variação",                    key: "estoque",     width: 12 },
-        { header: "Estoque mínimo para aviso",              key: "estoqueMin",  width: 14 },
-        { header: "Quando acabar o estoque",                key: "fimEstoque",  width: 16 },
-        { header: "Altura (cm)",                            key: "altura",      width: 12 },
-        { header: "Comprimento (cm)",                       key: "comprimento", width: 14 },
-        { header: "Largura (cm)",                           key: "largura",     width: 12 },
-        { header: "Peso da variação (gramas)",              key: "peso",        width: 16 },
+        { header: "Código da variação (ID)",                 key: "variacaoId",  width: 16 },
+        { header: "Código de referência do produto",         key: "produtoRef",  width: 20 },
+        { header: "Tipo da variação 1 (exemplo: Cor)",       key: "tipo1",       width: 16 },
+        { header: "Nome da variação 1 (exemplo: Branco)",    key: "nome1",       width: 22 },
+        { header: "Tipo da variação 2 (exemplo: Tamanho)",   key: "tipo2",       width: 14 },
+        { header: "Nome da variação 2 (exemplo: GG)",        key: "nome2",       width: 18 },
+        { header: "Preço de venda em reais",                 key: "preco",       width: 14 },
+        { header: "Estoque da variação",                     key: "estoque",     width: 12 },
+        { header: "Peso da variação (gramas)",               key: "peso",        width: 16 },
+        { header: "Altura (cm)",                             key: "altura",      width: 12 },
+        { header: "Largura (cm)",                            key: "largura",     width: 12 },
+        { header: "Comprimento (cm)",                        key: "comprimento", width: 14 },
+        { header: "Código EAN/GTIN/UPC",                     key: "ean",         width: 16 },
+        { header: "Endereço da imagem principal da variação", key: "img1",       width: 30 },
+        { header: "Endereço da imagem da variação 2",        key: "img2",        width: 30 },
+        { header: "Endereço da imagem da variação 3",        key: "img3",        width: 30 },
+        { header: "Endereço da imagem da variação 4",        key: "img4",        width: 30 },
+        { header: "Endereço da imagem da variação 5",        key: "img5",        width: 30 },
       ];
       wsOut.getRow(1).font = { bold: true };
-      // produtoId: célula numérica caiu em "É obrigatório informar o
-      // campo" em testes anteriores — manter como texto até confirmar
-      // que a versão atual da Tray aceitou (ver doc: tipo "Número").
-      wsOut.getColumn("produtoId").numFmt = "@";
+      // Código de referência do produto é SKU texto — força "@" para que
+      // um SKU 100% numérico (ex: "12345") não vire célula tipo número.
+      wsOut.getColumn("produtoRef").numFmt = "@";
 
-      for (const { trayId } of pairs) {
+      // "Código da variação (ID)" precisa ser numérico único e não-zero.
+      // A doc diz "0 = auto-gerar", mas empiricamente esta conta rejeita
+      // 0 com "Somente valor numérico permitido". Usamos trayId*100 +
+      // índice para garantir unicidade sem colisão provável com IDs reais.
+      for (const { sku, trayId } of pairs) {
+        let idx = 0;
         for (const moldura of MOLDURAS) {
           for (const tam of TAMANHOS) {
+            idx += 1;
             wsOut.addRow({
-              produtoId: String(trayId),
-              nome1: moldura,
-              nome2: tam.nome,
+              variacaoId: trayId * 100 + idx,
+              produtoRef: sku,
               tipo1: "Cor Moldura",
+              nome1: moldura,
               tipo2: "Tamanho",
+              nome2: tam.nome,
+              preco: null,
               estoque: ESTOQUE_POR_VARIACAO,
-              estoqueMin: ESTOQUE_MIN,
-              // Doc Tray aceita "Manter ativo, mas não permitir vendas"
-              // entre os valores literais — bate com o default do produto.
-              fimEstoque: "Manter ativo, mas não permitir vendas",
-              altura: tam.altura,
-              comprimento: tam.comprimento,
-              largura: tam.largura,
               peso: tam.pesoGramas,
+              altura: tam.altura,
+              largura: tam.largura,
+              comprimento: tam.comprimento,
+              ean: null,
+              img1: null,
+              img2: null,
+              img3: null,
+              img4: null,
+              img5: null,
             });
           }
         }
