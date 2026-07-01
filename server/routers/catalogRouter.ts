@@ -552,18 +552,20 @@ export const catalogRouter = router({
     }),
 
   /**
-   * Gera planilha de variações Tray a partir do XLSX de produtos exportado
-   * pela Tray (com a coluna "Código do produto (ID)" preenchida).
+   * Gera planilha de variações Tray a partir do XLSX/CSV de produtos
+   * exportado pela Tray (com a coluna "Código do produto (ID)" preenchida).
    *
    * Fluxo (round-trip):
    *  1. Usuária importa produtos via `exportTrayImport` → Tray atribui IDs.
    *  2. Usuária baixa do painel da Tray a planilha de produtos com os IDs.
-   *  3. Aqui: lemos esse XLSX, casamos SKU (coluna "Referência") → ID Tray,
-   *     e emitimos 32 linhas por produto (4 molduras × 8 tamanhos) no
-   *     layout do Modelo_Variacoes.xls oficial da Tray (18 colunas:
-   *     Código da variação (ID), Código de referência do produto,
-   *     Tipo 1, Nome 1, Tipo 2, Nome 2, Preço, Estoque, Peso, Altura,
-   *     Largura, Comprimento, EAN, e 5 URLs de imagem).
+   *  3. Aqui: lemos esse arquivo, pegamos o ID Tray de cada produto e
+   *     emitimos 32 linhas por produto (4 molduras × 8 tamanhos), no
+   *     layout validado por importação manual bem-sucedida no painel da
+   *     Tray (planilha "1480066_23486_Qtok_variacaoes.xlsx"): coluna A em
+   *     branco, depois Código do produto (ID), Código da variação (ID),
+   *     Nome da variação 1, Nome da variação 2, Tipo da variação 1, Tipo
+   *     da variação 2, Estoque da variação, Estoque mínimo para aviso,
+   *     Quando acabar o estoque, Altura, Comprimento, Largura, Peso.
    */
   exportTrayVariations: protectedProcedure
     .input(z.object({ fileBase64: z.string().min(1) }))
@@ -737,74 +739,62 @@ export const catalogRouter = router({
         });
       }
 
-      // Layout do Modelo_Variacoes.xls oficial da Tray, na ordem exata
-      // esperada pelo importador (que parseia por POSIÇÃO, não por header).
-      // Iterações anteriores erraram tentando col A = "Código do produto
-      // (ID)"; na verdade col A é "Código da variação (ID)" (numérico) e
-      // o vínculo com o produto pai vai em col B como SKU texto ("Código
-      // de referência do produto"). Todos os erros "Somente valor numérico
-      // permitido" no col A vinham de ter jogado texto (nome de moldura
-      // ou SKU de produto) onde a Tray espera o ID numérico da variação.
-      //
-      // Colunas Preço, EAN e URLs de imagem ficam em branco: a doc da
-      // Tray diz que valores em branco herdam do produto pai; a usuária
-      // completa depois no painel. Estoque mínimo e "Quando acabar" não
-      // existem nesse template — foram inferidas erroneamente.
+      // Estoque mínimo para aviso e comportamento ao esgotar, constantes
+      // para todas as variações — valores confirmados na importação manual
+      // que funcionou no painel da Tray.
+      const ESTOQUE_MINIMO_AVISO = 5;
+      const QUANDO_ACABAR_ESTOQUE = "Manter ativo, mas não permitir vendas";
+      const TIPO_VARIACAO_1 = "Moldura";
+      const TIPO_VARIACAO_2 = "Tamanho";
+
+      // Layout validado por importação manual bem-sucedida no painel da
+      // Tray. A coluna A fica em branco (espaçador do template oficial);
+      // os dados começam na coluna B com o ID numérico do produto pai —
+      // não o SKU/Referência. "Código da variação (ID)" = 0 em todas as
+      // linhas (Tray auto-gera o ID de cada variação nova).
       const wbOut = new ExcelJS.Workbook();
       const wsOut = wbOut.addWorksheet("Worksheet");
       wsOut.columns = [
-        { header: "Código da variação (ID)",                 key: "variacaoId",  width: 16 },
-        { header: "Código de referência do produto",         key: "produtoRef",  width: 20 },
-        { header: "Tipo da variação 1 (exemplo: Cor)",       key: "tipo1",       width: 16 },
-        { header: "Nome da variação 1 (exemplo: Branco)",    key: "nome1",       width: 22 },
+        { header: "",                                     key: "blank",       width: 9.17 },
+        { header: "Código do produto (ID)",                key: "produtoId",   width: 18 },
+        { header: "Código da variação (ID)",                key: "variacaoId",  width: 16 },
+        { header: "Nome da variação 1 (exemplo: Moldura)",   key: "nome1",       width: 22 },
+        { header: "Nome da variação 2 (exemplo: Tamanho)",   key: "nome2",       width: 18 },
+        { header: "Tipo da variação 1 (exemplo: Moldura)",   key: "tipo1",       width: 16 },
         { header: "Tipo da variação 2 (exemplo: Tamanho)",   key: "tipo2",       width: 14 },
-        { header: "Nome da variação 2 (exemplo: GG)",        key: "nome2",       width: 18 },
-        { header: "Preço de venda em reais",                 key: "preco",       width: 14 },
         { header: "Estoque da variação",                     key: "estoque",     width: 12 },
-        { header: "Peso da variação (gramas)",               key: "peso",        width: 16 },
+        { header: "Estoque mínimo para aviso",               key: "estoqueMin",  width: 16 },
+        { header: "Quando acabar o estoque",                 key: "quandoAcabar",width: 20 },
         { header: "Altura (cm)",                             key: "altura",      width: 12 },
-        { header: "Largura (cm)",                            key: "largura",     width: 12 },
         { header: "Comprimento (cm)",                        key: "comprimento", width: 14 },
-        { header: "Código EAN/GTIN/UPC",                     key: "ean",         width: 16 },
-        { header: "Endereço da imagem principal da variação", key: "img1",       width: 30 },
-        { header: "Endereço da imagem da variação 2",        key: "img2",        width: 30 },
-        { header: "Endereço da imagem da variação 3",        key: "img3",        width: 30 },
-        { header: "Endereço da imagem da variação 4",        key: "img4",        width: 30 },
-        { header: "Endereço da imagem da variação 5",        key: "img5",        width: 30 },
+        { header: "Largura (cm)",                            key: "largura",     width: 12 },
+        { header: "Peso da variação (gramas)",               key: "peso",        width: 16 },
       ];
       wsOut.getRow(1).font = { bold: true };
-      // Código de referência do produto é SKU texto — força "@" para que
-      // um SKU 100% numérico (ex: "12345") não vire célula tipo número.
-      wsOut.getColumn("produtoRef").numFmt = "@";
+      wsOut.getRow(1).eachCell({ includeEmpty: false }, (cell) => {
+        cell.numFmt = "@";
+      });
+      for (const key of ["nome1", "nome2", "tipo1", "tipo2", "quandoAcabar"]) {
+        wsOut.getColumn(key).numFmt = "@";
+      }
 
-      // "Código da variação (ID)" precisa ser numérico único e não-zero.
-      // A doc diz "0 = auto-gerar", mas empiricamente esta conta rejeita
-      // 0 com "Somente valor numérico permitido". Usamos trayId*100 +
-      // índice para garantir unicidade sem colisão provável com IDs reais.
-      for (const { sku, trayId } of pairs) {
-        let idx = 0;
+      for (const { trayId } of pairs) {
         for (const moldura of MOLDURAS) {
           for (const tam of TAMANHOS) {
-            idx += 1;
             wsOut.addRow({
-              variacaoId: trayId * 100 + idx,
-              produtoRef: sku,
-              tipo1: "Cor Moldura",
+              produtoId: Math.trunc(trayId),
+              variacaoId: 0,
               nome1: moldura,
-              tipo2: "Tamanho",
               nome2: tam.nome,
-              preco: null,
+              tipo1: TIPO_VARIACAO_1,
+              tipo2: TIPO_VARIACAO_2,
               estoque: ESTOQUE_POR_VARIACAO,
-              peso: tam.pesoGramas,
+              estoqueMin: ESTOQUE_MINIMO_AVISO,
+              quandoAcabar: QUANDO_ACABAR_ESTOQUE,
               altura: tam.altura,
-              largura: tam.largura,
               comprimento: tam.comprimento,
-              ean: null,
-              img1: null,
-              img2: null,
-              img3: null,
-              img4: null,
-              img5: null,
+              largura: tam.largura,
+              peso: tam.pesoGramas,
             });
           }
         }
