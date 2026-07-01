@@ -652,14 +652,30 @@ export const catalogRouter = router({
             message: "Planilha vazia — nenhuma aba encontrada.",
           });
         }
-        const headerRow = ws.getRow(1);
+        // O painel da Tray às vezes prefixa a planilha com uma linha de
+        // título (nome do arquivo) antes do cabeçalho de verdade, então
+        // procuramos o cabeçalho nas primeiras linhas em vez de assumir
+        // que está sempre na linha 1.
         let idCol = -1;
         let refCol = -1;
-        headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-          const text = String(cell.value ?? "");
-          if (isIdHeader(text)) idCol = colNumber;
-          if (isRefHeader(text)) refCol = colNumber;
-        });
+        let headerRowNumber = -1;
+        const HEADER_SEARCH_ROWS = 5;
+        for (let r = 1; r <= Math.min(HEADER_SEARCH_ROWS, ws.rowCount); r++) {
+          const row = ws.getRow(r);
+          let foundId = -1;
+          let foundRef = -1;
+          row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+            const text = String(cell.value ?? "");
+            if (isIdHeader(text)) foundId = colNumber;
+            if (isRefHeader(text)) foundRef = colNumber;
+          });
+          if (foundId !== -1 && foundRef !== -1) {
+            idCol = foundId;
+            refCol = foundRef;
+            headerRowNumber = r;
+            break;
+          }
+        }
         if (idCol === -1 || refCol === -1) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -667,7 +683,7 @@ export const catalogRouter = router({
               "Não achei as colunas 'Código produto' e 'Referência' no cabeçalho. Confirme que é a planilha de produtos exportada pela Tray.",
           });
         }
-        for (let r = 2; r <= ws.rowCount; r++) {
+        for (let r = headerRowNumber + 1; r <= ws.rowCount; r++) {
           const row = ws.getRow(r);
           const sku = String(row.getCell(refCol).value ?? "").trim();
           const idRaw = row.getCell(idCol).value;
@@ -708,9 +724,22 @@ export const catalogRouter = router({
             message: "CSV sem linhas de dados. Verifique se exportou o arquivo certo.",
           });
         }
-        const header = rows[0];
-        const idCol = header.findIndex(isIdHeader);
-        const refCol = header.findIndex(isRefHeader);
+        // Mesma cautela do XLSX: a Tray às vezes prefixa o arquivo com uma
+        // linha de título antes do cabeçalho de verdade.
+        let idCol = -1;
+        let refCol = -1;
+        let headerRowIndex = -1;
+        const HEADER_SEARCH_ROWS = 5;
+        for (let r = 0; r < Math.min(HEADER_SEARCH_ROWS, rows.length); r++) {
+          const foundId = rows[r].findIndex(isIdHeader);
+          const foundRef = rows[r].findIndex(isRefHeader);
+          if (foundId !== -1 && foundRef !== -1) {
+            idCol = foundId;
+            refCol = foundRef;
+            headerRowIndex = r;
+            break;
+          }
+        }
         if (idCol === -1 || refCol === -1) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -718,7 +747,7 @@ export const catalogRouter = router({
               "Não achei as colunas 'Código produto' e 'Referência' no cabeçalho. Confirme que é a planilha de produtos exportada pela Tray.",
           });
         }
-        for (let r = 1; r < rows.length; r++) {
+        for (let r = headerRowIndex + 1; r < rows.length; r++) {
           const row = rows[r];
           const sku = (row[refCol] ?? "").trim();
           if (!sku) continue;
