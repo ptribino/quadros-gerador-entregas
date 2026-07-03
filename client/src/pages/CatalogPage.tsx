@@ -76,6 +76,7 @@ export default function CatalogPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [styleOverride, setStyleOverride] = useState<StyleOverride>("auto");
+  const [catalogLinkBaseUrl, setCatalogLinkBaseUrl] = useState<string>("");
 
   const utils = trpc.useUtils();
   const categoriesQuery = trpc.catalog.listCategories.useQuery(undefined, {
@@ -166,6 +167,17 @@ export default function CatalogPage() {
     reader.onerror = () => toast.error("Erro ao ler o arquivo");
     reader.readAsDataURL(file);
   };
+
+  const exportCatalogHtmlMutation = trpc.catalog.exportCatalogHtml.useMutation({
+    onSuccess: (res) => {
+      const link = document.createElement("a");
+      link.href = `data:${res.mimeType};base64,${res.base64}`;
+      link.download = res.fileName;
+      link.click();
+      toast.success(`Catálogo HTML gerado com ${res.rows} produtos`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const exportTrayMutation = trpc.catalog.exportTrayImport.useMutation({
     onSuccess: (res) => {
@@ -541,6 +553,30 @@ export default function CatalogPage() {
                 title="Planilha pronta para importar na Tray (formato 30 colunas)"
               >
                 {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
+              </Button>
+              <Input
+                value={catalogLinkBaseUrl}
+                onChange={(e) => setCatalogLinkBaseUrl(e.target.value)}
+                placeholder="URL da loja p/ linkar (ex: https://sualoja.com.br/)"
+                className="w-64"
+                title="Prefixo usado para linkar cada card do catálogo à página do produto na Tray (concatena com o slug SEO). Deixe em branco para gerar só imagens sem link."
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={exportCatalogHtmlMutation.isPending}
+                onClick={() =>
+                  exportCatalogHtmlMutation.mutate({
+                    ...(selectedIds.size > 0
+                      ? { productIds: Array.from(selectedIds) }
+                      : { categoryCodeId: categoryId ? Number(categoryId) : undefined }),
+                    showPrice: false,
+                    linkBaseUrl: catalogLinkBaseUrl.trim() || undefined,
+                  })
+                }
+                title="Página HTML autocontida com a galeria dos quadros já cadastrados (foto web de cada produto) — cole no editor de HTML de uma página da Tray"
+              >
+                {exportCatalogHtmlMutation.isPending ? "..." : "Exportar Catálogo (HTML)"}
               </Button>
               <input
                 ref={trayVariationsInputRef}

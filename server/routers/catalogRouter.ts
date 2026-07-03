@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getValidAccessToken } from "../_core/oauth";
@@ -84,6 +84,26 @@ function parseCsvSemicolon(text: string): string[][] {
     rows.push(row);
   }
   return rows;
+}
+
+/**
+ * Transforma URLs antigas salvas no DB (formato `uc?export=download&id=...`)
+ * em URLs do proxy `/img/<id>.jpg` que a Tray aceita. Sem isso, produtos
+ * gerados antes desse fix continuam quebrando na importação.
+ */
+function toTrayImageUrl(saved: string | null | undefined): string {
+  if (!saved) return "";
+  return googleDriveService.publicDownloadUrl(extractDriveFileId(saved));
+}
+
+/** Escapa HTML para uso seguro dentro de atributos/texto (nome vem de IA ou edição manual). */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 async function requireDb() {
@@ -459,14 +479,6 @@ export const catalogRouter = router({
       // principal (ID)") são numéricas — deixadas em branco para criar
       // produtos novos (Tray gera os IDs); preencher só ao atualizar.
 
-      // Transforma URLs antigas salvas no DB (formato `uc?export=download&id=...`)
-      // em URLs do proxy `/img/<id>.jpg` que a Tray aceita. Sem isso, produtos
-      // gerados antes desse fix continuam quebrando na importação.
-      const toTrayImageUrl = (saved: string | null | undefined): string => {
-        if (!saved) return "";
-        return googleDriveService.publicDownloadUrl(extractDriveFileId(saved));
-      };
-
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Worksheet");
       ws.columns = [
@@ -562,6 +574,92 @@ export const catalogRouter = router({
         base64,
         rows: rows.length,
         skipped,
+      };
+    }),
+
+  /**
+   * Gera uma página HTML autocontida (CSS inline, sem JS/dependências) com
+   * a galeria dos quadros já cadastrados — usa a "foto web" (imageUrl1: arte
+   * original sem moldura/ambiente) de cada produto. Pensada pra colar direto
+   * no editor de HTML de uma página/landing da Tray.
+   */
+  exportCatalogHtml: protectedProcedure
+    .input(
+      z.object({
+        categoryCodeId: z.number().int().positive().optional(),
+        productIds: z.array(z.number().int().positive()).optional(),
+        showPrice: z.boolean().default(true),
+        /** Prefixo de URL pra linkar cada card ao produto na loja (ex: https://qtokquadros.com.br/produto/). Omitido = card sem link. */
+        linkBaseUrl: z.string().url().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await requireDb();
+      const conditions = [
+        eq(products.userId, ctx.user.id),
+        isNotNull(products.imageUrl1),
+        eq(products.exibirNaLoja, true),
+      ];
+      if (input.categoryCodeId) conditions.push(eq(products.categoryCodeId, input.categoryCodeId));
+      if (input.productIds && input.productIds.length > 0) {
+        conditions.push(inArray(products.id, input.productIds));
+      }
+
+      const rows = await db
+        .select({ p: products, c: categoryCodes })
+        .from(products)
+        .leftJoin(categoryCodes, eq(products.categoryCodeId, categoryCodes.id))
+        .where(and(...conditions))
+        .orderBy(asc(categoryCodes.displayName), asc(products.nome));
+
+      const priceFormatter = new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      });
+
+      const cardsHtml = rows
+        .map(({ p }) => {
+          const imgUrl = toTrayImageUrl(p.imageUrl1);
+          const nome = escapeHtml(p.nome);
+          const price = input.showPrice
+            ? `<div class="qc-price">${escapeHtml(priceFormatter.format(Number(p.precoVenda)))}</div>`
+            : "";
+          const inner = `
+        <div class="qc-thumb"><img src="${imgUrl}" alt="${nome}" loading="lazy"></div>
+        <div class="qc-name">${nome}</div>
+        ${price}`;
+          if (input.linkBaseUrl) {
+            const href = escapeHtml(
+              `${input.linkBaseUrl}${p.slugSeo ?? ""}`,
+            );
+            return `      <a class="qc-card" href="${href}">${inner}\n      </a>`;
+          }
+          return `      <div class="qc-card">${inner}\n      </div>`;
+        })
+        .join("\n");
+
+      const html = `<!-- Catálogo GoQuadros — gerado em ${new Date().toISOString().slice(0, 10)} (${rows.length} produtos) -->
+<style>
+  .qc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin: 0 auto; max-width: 1200px; padding: 16px; }
+  .qc-card { display: block; text-decoration: none; color: inherit; border-radius: 8px; overflow: hidden; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.12); transition: transform 0.15s ease, box-shadow 0.15s ease; }
+  .qc-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+  .qc-thumb { width: 100%; aspect-ratio: 3 / 4; overflow: hidden; background: #f2f2f2; }
+  .qc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .qc-name { padding: 10px 12px 2px; font-size: 14px; font-weight: 600; line-height: 1.3; }
+  .qc-price { padding: 0 12px 12px; font-size: 13px; color: #444; }
+</style>
+<div class="qc-grid">
+${cardsHtml}
+</div>
+`;
+
+      const base64 = Buffer.from(html, "utf-8").toString("base64");
+      const fileName = `Catalogo_GoQuadros_${new Date().toISOString().slice(0, 10)}.html`;
+      return {
+        fileName,
+        mimeType: "text/html",
+        base64,
+        rows: rows.length,
       };
     }),
 
