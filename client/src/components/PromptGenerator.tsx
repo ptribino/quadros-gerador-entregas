@@ -79,7 +79,7 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
     office:
       'a home or executive office with a clean wooden desk, an ergonomic chair, organized shelves with books and a small potted plant, and a large window with soft natural light filtering through blinds',
     kitchen:
-      'an open kitchen and dining area with a wooden dining table and four chairs, ceramic tableware, a fresh fruit bowl on the table, kitchen cabinets visible in the background, a pendant light above the table, and warm natural daylight from a side window',
+      'a bright dining nook with the edge of a wooden dining table and simple ceramic tableware, kitchen cabinetry visible softly out of focus in the background, a pendant light above the table, and warm natural daylight from a side window',
     bathroom:
       'a residential powder room (lavabo) with a stone or wooden vanity, an undermount basin, a wall-mounted decorative mirror, neatly folded hand towels, a small potted plant, and a warm overhead light',
     gourmet_area:
@@ -122,9 +122,9 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
         `Indistinguishable from a professional editorial interior shoot for a premium decor brand (reference: goquadros.com.br). MUST NOT look AI-generated, MUST NOT look 3D-rendered or CG. Photographic realism with crisp focus and natural film-like quality.`,
         `Lighting: warm golden directional sunlight entering through a window, casting crisp soft shadows on the floor and adjacent surfaces. Avoid flat ambient lighting and avoid window overexposure — keep the highlights controlled.`,
         `Color and depth: vivid saturated natural colors with rich contrast, deep tonal range (true blacks, clean whites), every plane crisp and in focus throughout the scene — deep focus, no shallow depth of field, no blurry background.`,
-        `Composition: 35mm lens, frontal shot tilted slightly upward so the wall and the framed artwork dominate the upper three-quarters of the image. Minimize floor visibility — show only the lower 10-15% of the image as floor/furniture base, just enough to ground the scene. NEVER let furniture, floor or props take more space than the artwork. No other wall art or gallery-wall arrangement visible — the featured piece is the only artwork on the wall.`,
-        `Curated decor (small and supporting): at most one or two objects — a ceramic vase, a stack of design books, fresh greenery — placed at the artwork's base, not competing with it. No wide-angle pull-back showing entire rooms.`,
-        `The LARGE framed print is the absolute visual anchor, hung prominently centered on the main wall and occupying 65-80% of the wall height. It dominates the composition unmistakably — the eye goes to the artwork first, every other element is small and strictly secondary.`,
+        `Composition: 35mm lens, frontal shot, camera positioned close to the wall. CROP TIGHT so the top and bottom edges of the framed artwork nearly touch the top and bottom edges of the photo — this is a close-up of the art on the wall, NOT a wide shot of the room. Furniture must appear only as a small cropped sliver at the very bottom edge (e.g. just the tabletop surface or the very top of a chair back) — NEVER show a full table, full chairs, or enough of the floor to read as a wide room shot. If in doubt, crop closer and show less of the room, not more. No other wall art or gallery-wall arrangement visible — the featured piece is the only artwork on the wall.`,
+        `Curated decor (small and supporting): at most one small object partially visible at the frame's edge — a ceramic vase or a stack of design books — not a full styled tablescape. No wide-angle pull-back showing entire rooms.`,
+        `The LARGE framed print is the absolute visual anchor, filling 70-85% of the total image height. It dominates the composition unmistakably — the eye goes to the artwork first, every other element is a small, blurred-adjacent, strictly secondary detail at the frame's edge.`,
         `Frame: thin, ${frameLabel[frameType]}, intentionally chosen to harmonize with the room's palette and decor.`,
         finishConstraints,
         artworkFidelity,
