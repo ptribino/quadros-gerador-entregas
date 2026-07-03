@@ -22,6 +22,7 @@ type RoomType =
   | 'bathroom'
   | 'gourmet_area';
 type StyleType =
+  | 'goquadros_signature'
   | 'scandinavian'
   | 'japandi'
   | 'minimalist'
@@ -49,6 +50,7 @@ const ROOM_OPTIONS: ReadonlyArray<{ value: RoomType; label: string }> = [
 ];
 
 const STYLE_OPTIONS: ReadonlyArray<{ value: StyleType; label: string }> = [
+  { value: 'goquadros_signature', label: 'Padrão GoQuadros (recomendado)' },
   { value: 'scandinavian', label: 'Escandinavo' },
   { value: 'japandi', label: 'Japandi' },
   { value: 'minimalist', label: 'Minimalista' },
@@ -77,7 +79,7 @@ export default function Home() {
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('lifestyle');
   const [frameType, setFrameType] = useState<FrameType>('light_wood');
   const [roomType, setRoomType] = useState<RoomType>('living_room');
-  const [styleType, setStyleType] = useState<StyleType>('scandinavian');
+  const [styleType, setStyleType] = useState<StyleType>('goquadros_signature');
   const [generatedItems, setGeneratedItems] = useState<GeneratedItem[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [folderDialog, setFolderDialog] = useState<{ open: boolean; item: GeneratedItem | null }>({ open: false, item: null });
