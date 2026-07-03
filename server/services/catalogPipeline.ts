@@ -75,6 +75,17 @@ function pickRandom<T>(list: readonly T[]): T {
 }
 
 /**
+ * Sorteia dois itens DISTINTOS de uma lista (sem reposição). Se a lista só
+ * tem 1 item, retorna o mesmo item duas vezes — não tem como evitar.
+ */
+function pickTwoDistinct<T>(list: readonly T[]): [T, T] {
+  const first = pickRandom(list);
+  if (list.length === 1) return [first, first];
+  const rest = list.filter((item) => item !== first);
+  return [first, pickRandom(rest)];
+}
+
+/**
  * Cômodos "universais" — cabem qualquer arte temática genérica (paisagens,
  * abstratos, animais, frases, etc.). Padronizado em sala + cozinha/jantar
  * pra manter o sortimento consistente com o padrão visual do goquadros.com.br
@@ -267,16 +278,18 @@ export async function runForProduct(
   // Cômodos elegíveis dependem da categoria do produto (ex: INF → só kids_room).
   const eligibleRooms = roomsForCategory(product.categoryCode3);
 
-  // Sorteios independentes de cômodo pra cada lifestyle. Se a categoria tem
-  // só 1 cômodo elegível, os dois lifestyles caem no mesmo cômodo — o estilo
-  // distingue.
-  const regularRoom: RoomType = pickRandom(eligibleRooms);
+  // Como as duas lifestyles agora usam o MESMO estilo (goquadros_signature),
+  // o cômodo é a única fonte de variedade entre elas — sorteios independentes
+  // colidiam sempre que o pool padrão (sala + cozinha, só 2 opções) caía duas
+  // vezes no mesmo cômodo. Sorteia sem reposição pra garantir cômodos
+  // diferentes sempre que a categoria permitir mais de um.
+  const [regularRoom, proRoomRandom] = pickTwoDistinct(eligibleRooms);
   // Arte de animal imponente (águia, leão, lobo etc.) vai pra office na
   // segunda lifestyle quando office estiver elegível. Cobre o caso de quadros
   // que ficam estranhos em sala/quarto aconchegante e melhor em escritório.
   const forceOffice =
     prefersOfficeScene(product.aiPalavrasChave) && eligibleRooms.includes("office");
-  const proRoom: RoomType = forceOffice ? "office" : pickRandom(eligibleRooms);
+  const proRoom: RoomType = forceOffice ? "office" : proRoomRandom;
 
   // ETAPA 2 — Lifestyle "regular"
   const lifeRaw = await generateLifestyle(frame, regularRoom, regularStyle, referenceDataUrl);
