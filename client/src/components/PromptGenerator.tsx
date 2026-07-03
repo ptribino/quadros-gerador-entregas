@@ -16,6 +16,7 @@ type RoomType =
   | 'bathroom'
   | 'gourmet_area';
 type StyleType =
+  | 'goquadros_signature'
   | 'scandinavian'
   | 'japandi'
   | 'minimalist'
@@ -36,6 +37,7 @@ const ROOM_OPTIONS: ReadonlyArray<{ value: RoomType; label: string }> = [
 ];
 
 const STYLE_OPTIONS: ReadonlyArray<{ value: StyleType; label: string }> = [
+  { value: 'goquadros_signature', label: 'Padrão GoQuadros (recomendado)' },
   { value: 'scandinavian', label: 'Escandinavo' },
   { value: 'japandi', label: 'Japandi' },
   { value: 'minimalist', label: 'Minimalista' },
@@ -54,7 +56,7 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('lifestyle');
   const [frameType, setFrameType] = useState<FrameType>('light_wood');
   const [roomType, setRoomType] = useState<RoomType>('living_room');
-  const [styleType, setStyleType] = useState<StyleType>('scandinavian');
+  const [styleType, setStyleType] = useState<StyleType>('goquadros_signature');
   const [isKit, setIsKit] = useState(false);
   const [kitQuantity, setKitQuantity] = useState(kitSize);
   const [copied, setCopied] = useState(false);
@@ -85,6 +87,8 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
   };
 
   const styleDescriptions: Record<StyleType, string> = {
+    goquadros_signature:
+      'GoQuadros signature aesthetic: warm cream and soft beige walls, mid-tone natural wood furniture (never dark jacaranda, never glossy painted pieces), a warm ivory and sand color palette with gentle neutral undertones, one single well-chosen decor accent nearby (a ceramic vase, a small stack of books, or dried pampas grass) and nothing else — never cluttered, never eclectic, always calm and refined, upscale residential feel consistent with premium Brazilian home-décor retail photography',
     scandinavian:
       'Scandinavian aesthetic: white plaster walls, light oak or pale pine flooring, raw linen and wool textiles in warm whites, a neutral palette accented with sage green and dried pampas, minimalist decor, lived-in but uncluttered',
     japandi:
@@ -118,9 +122,9 @@ export default function PromptGenerator({ kitSize = 1 }: PromptGeneratorProps) {
         `Indistinguishable from a professional editorial interior shoot for a premium decor brand (reference: goquadros.com.br). MUST NOT look AI-generated, MUST NOT look 3D-rendered or CG. Photographic realism with crisp focus and natural film-like quality.`,
         `Lighting: warm golden directional sunlight entering through a window, casting crisp soft shadows on the floor and adjacent surfaces. Avoid flat ambient lighting and avoid window overexposure — keep the highlights controlled.`,
         `Color and depth: vivid saturated natural colors with rich contrast, deep tonal range (true blacks, clean whites), every plane crisp and in focus throughout the scene — deep focus, no shallow depth of field, no blurry background.`,
-        `Composition: 35mm lens, frontal shot tilted slightly upward so the wall and the framed artwork dominate the upper two-thirds of the image. Minimize floor visibility — show only the lower 20-25% of the image as floor/furniture base, just enough to ground the scene. NEVER let furniture, floor or props take more space than the artwork.`,
-        `Curated decor (small and supporting): a ceramic vase, a stack of design books, fresh greenery, woven textures, refined objects — placed at the artwork's base, not competing with it. No wide-angle pull-back showing entire rooms.`,
-        `The LARGE framed print is the absolute visual anchor, hung prominently centered on the main wall and occupying 45-60% of the wall height. It dominates the composition unmistakably — the eye goes to the artwork first, every other element supports it.`,
+        `Composition: 35mm lens, frontal shot tilted slightly upward so the wall and the framed artwork dominate the upper three-quarters of the image. Minimize floor visibility — show only the lower 10-15% of the image as floor/furniture base, just enough to ground the scene. NEVER let furniture, floor or props take more space than the artwork. No other wall art or gallery-wall arrangement visible — the featured piece is the only artwork on the wall.`,
+        `Curated decor (small and supporting): at most one or two objects — a ceramic vase, a stack of design books, fresh greenery — placed at the artwork's base, not competing with it. No wide-angle pull-back showing entire rooms.`,
+        `The LARGE framed print is the absolute visual anchor, hung prominently centered on the main wall and occupying 65-80% of the wall height. It dominates the composition unmistakably — the eye goes to the artwork first, every other element is small and strictly secondary.`,
         `Frame: thin, ${frameLabel[frameType]}, intentionally chosen to harmonize with the room's palette and decor.`,
         finishConstraints,
         artworkFidelity,

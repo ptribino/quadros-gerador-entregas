@@ -14,6 +14,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
 import { products } from "../../drizzle/schema";
 import { runForProduct } from "../services/catalogPipeline";
+import type { PipelineProduct } from "../services/catalogPipeline";
 import { getValidAccessToken } from "./oauth";
 import { getUserByOpenId } from "../db";
 import { eq as eqQ } from "drizzle-orm";
@@ -102,6 +103,7 @@ async function processOne(): Promise<boolean> {
         sourceDriveFileId: product.sourceDriveFileId,
         categoryCode3,
         aiPalavrasChave: product.aiPalavrasChave,
+        styleOverride: product.genStyleOverride as PipelineProduct["styleOverride"],
       },
       { accessToken },
       async (step, message) => {

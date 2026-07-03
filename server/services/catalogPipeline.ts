@@ -13,7 +13,7 @@ import sharp from "sharp";
 import { ENV } from "../_core/env";
 import { googleDriveService } from "./googleDriveService";
 import { googleImagenService } from "./freepikService";
-import { promptAgentService, FRAMES, STYLES, framesForStyle } from "./promptAgentService";
+import { promptAgentService, FRAMES, framesForStyle } from "./promptAgentService";
 import type { FrameType, RoomType, StyleType } from "./promptAgentService";
 
 export type { FrameType, RoomType, StyleType };
@@ -33,6 +33,12 @@ export interface PipelineProduct {
   categoryCode3?: string | null;
   /** Palavras-chave da curadoria por IA. Usado pra detectar artes imponentes (águia/leão/lobo) que pedem cenário de escritório. */
   aiPalavrasChave?: string | null;
+  /**
+   * Estilo escolhido manualmente pelo usuário antes de enfileirar a geração.
+   * Se omitido, o pipeline usa o padrão de marca `goquadros_signature` nas
+   * duas lifestyles — mantendo o sortimento visualmente consistente.
+   */
+  styleOverride?: StyleType | null;
 }
 
 /**
@@ -70,15 +76,13 @@ function pickRandom<T>(list: readonly T[]): T {
 
 /**
  * Cômodos "universais" — cabem qualquer arte temática genérica (paisagens,
- * abstratos, animais, frases, etc.). Excluímos kids_room (só pra arte
- * infantil), bathroom (renderiza mal) e gourmet_area (nicho de bebidas).
+ * abstratos, animais, frases, etc.). Padronizado em sala + cozinha/jantar
+ * pra manter o sortimento consistente com o padrão visual do goquadros.com.br
+ * (decidido com a Priscila em 2026-07-03). Quarto, escritório, lavabo e área
+ * gourmet ficam restritos às categorias que já pedem explicitamente por eles
+ * via CATEGORY_ROOM_AFFINITY (ex: VEI → escritório/quarto).
  */
-const UNIVERSAL_ROOMS: readonly RoomType[] = [
-  "living_room",
-  "bedroom",
-  "office",
-  "kitchen",
-];
+const UNIVERSAL_ROOMS: readonly RoomType[] = ["living_room", "kitchen"];
 
 /**
  * Mapa categoria (code3) → cômodos elegíveis para a geração de lifestyle.
@@ -249,10 +253,11 @@ export async function runForProduct(
   );
   await googleDriveService.makePublic(accessToken, originalWebFile.id);
 
-  // Sorteia primeiro estilo, DEPOIS uma moldura compatível com aquele estilo.
-  // Isso evita combinações esquisitas (ex: industrial com moldura branca).
-  const regularStyle: StyleType = pickRandom(STYLES);
-  const proStyle: StyleType = pickRandom(STYLES);
+  // Padrão de marca: as duas lifestyles usam o estilo único goquadros_signature,
+  // pra manter o sortimento visualmente coeso com goquadros.com.br. Se o
+  // usuário escolheu um estilo manualmente na fila, ele prevalece nas duas.
+  const regularStyle: StyleType = product.styleOverride ?? "goquadros_signature";
+  const proStyle: StyleType = product.styleOverride ?? "goquadros_signature";
 
   // Moldura única pras 3 imagens do produto — escolhida em função do estilo
   // do lifestyle "principal" pra manter coerência. Mockup usa a mesma moldura

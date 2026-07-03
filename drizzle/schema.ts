@@ -142,6 +142,9 @@ export const products = mysqlTable(
     genStep: int("genStep"), // 1..3 — última etapa concluída pelo worker
     genAttempts: int("genAttempts").default(0).notNull(),
     genError: text("genError"),
+    // Estilo escolhido manualmente na fila (opcional). Nulo = usa o padrão
+    // de marca goquadros_signature.
+    genStyleOverride: varchar("genStyleOverride", { length: 32 }),
 
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

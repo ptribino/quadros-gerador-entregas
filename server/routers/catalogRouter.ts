@@ -10,6 +10,20 @@ import { getDb } from "../db";
 import { categoryCodes, products, productStatusEnum } from "../../drizzle/schema";
 import { ENV } from "../_core/env";
 
+// Mesmo conjunto de StyleType do promptAgentService — repetido como tupla
+// literal aqui pra alimentar o z.enum (mesmo padrão usado em generationRouter.ts).
+const STYLE_TYPES = [
+  "goquadros_signature",
+  "scandinavian",
+  "japandi",
+  "minimalist",
+  "boho",
+  "classic",
+  "contemporary",
+  "mid_century_br",
+  "brazilian_modern",
+] as const;
+
 async function requireAccessToken(openId: string): Promise<string> {
   const accessToken = await getValidAccessToken(openId);
   if (!accessToken) {
@@ -851,6 +865,11 @@ export const catalogRouter = router({
     .input(
       z.object({
         productIds: z.array(z.number().int().positive()).min(1).max(100),
+        /**
+         * Estilo escolhido manualmente pra essa leva. Se omitido, o pipeline
+         * usa o padrão de marca goquadros_signature.
+         */
+        styleOverride: z.enum(STYLE_TYPES).optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -866,6 +885,7 @@ export const catalogRouter = router({
           genStep: null,
           genError: null,
           genAttempts: 0,
+          genStyleOverride: input.styleOverride ?? null,
         })
         .where(
           and(

@@ -12,6 +12,7 @@ type RoomType =
   | 'bathroom'
   | 'gourmet_area';
 type StyleType =
+  | 'goquadros_signature'
   | 'scandinavian'
   | 'japandi'
   | 'minimalist'
@@ -42,6 +43,7 @@ const ROOMS: readonly RoomType[] = [
   'gourmet_area',
 ];
 const STYLES: readonly StyleType[] = [
+  'goquadros_signature',
   'scandinavian',
   'japandi',
   'minimalist',
@@ -85,6 +87,11 @@ const ROOM_DESCRIPTIONS: Record<RoomType, string> = {
  * da descrição de cômodo para compor "Sala no estilo Boho", "Quarto Japandi" etc.
  */
 const STYLE_DESCRIPTIONS: Record<StyleType, string> = {
+  // Identidade única da marca GoQuadros (goquadros.com.br) — usado como padrão
+  // no sortimento automático do catálogo pra manter o visual coeso entre
+  // produtos, em vez de cada um cair num estilo decorativo diferente.
+  goquadros_signature:
+    'GoQuadros signature aesthetic: warm cream and soft beige walls, mid-tone natural wood furniture (never dark jacaranda, never glossy painted pieces), a warm ivory and sand color palette with gentle neutral undertones, one single well-chosen decor accent nearby (a ceramic vase, a small stack of books, or dried pampas grass) and nothing else — never cluttered, never eclectic, always calm and refined, upscale residential feel consistent with premium Brazilian home-décor retail photography',
   scandinavian:
     'Scandinavian aesthetic: white plaster walls, light oak or pale pine flooring, raw linen and wool textiles in warm whites, a neutral palette accented with sage green and dried pampas, minimalist decor, lived-in but uncluttered',
   japandi:
@@ -131,6 +138,8 @@ const FINISH_CONSTRAINTS = [
  * moldura branca).
  */
 const FRAME_AFFINITY: Record<StyleType, readonly FrameType[]> = {
+  // Estilo único de marca — combina com qualquer moldura do catálogo.
+  goquadros_signature: ['light_wood', 'dark_wood', 'white', 'black'],
   scandinavian: ['light_wood', 'white'],
   japandi: ['light_wood', 'dark_wood', 'black'],
   minimalist: ['white', 'black'],
@@ -224,9 +233,9 @@ class PromptAgentService {
       `Indistinguishable from a professional editorial interior shoot for a premium decor brand (reference: goquadros.com.br). MUST NOT look AI-generated, MUST NOT look 3D-rendered or CG. Photographic realism with crisp focus and natural film-like quality.`,
       `Lighting: warm golden directional sunlight entering through a window, casting crisp soft shadows on the floor and adjacent surfaces. Avoid flat ambient lighting and avoid window overexposure — keep the highlights controlled.`,
       `Color and depth: vivid saturated natural colors with rich contrast, deep tonal range (true blacks, clean whites), every plane crisp and in focus throughout the scene — deep focus, no shallow depth of field, no blurry background.`,
-      `Composition: 35mm lens, frontal shot tilted slightly upward so the wall and the framed artwork dominate the upper two-thirds of the image. Minimize floor visibility — show only the lower 20-25% of the image as floor/furniture base, just enough to ground the scene. NEVER let furniture, floor or props take more space than the artwork.`,
-      `Curated decor (small and supporting): a ceramic vase, a stack of design books, fresh greenery, woven textures, refined objects — placed at the artwork's base, not competing with it. No wide-angle pull-back showing entire rooms.`,
-      `The LARGE framed print is the absolute visual anchor, hung prominently centered on the main wall and occupying 45-60% of the wall height. It dominates the composition unmistakably — the eye goes to the artwork first, every other element supports it.`,
+      `Composition: 35mm lens, frontal shot tilted slightly upward so the wall and the framed artwork dominate the upper three-quarters of the image. Minimize floor visibility — show only the lower 10-15% of the image as floor/furniture base, just enough to ground the scene. NEVER let furniture, floor or props take more space than the artwork. No other wall art or gallery-wall arrangement visible — the featured piece is the only artwork on the wall.`,
+      `Curated decor (small and supporting): at most one or two objects — a ceramic vase, a stack of design books, fresh greenery — placed at the artwork's base, not competing with it. No wide-angle pull-back showing entire rooms.`,
+      `The LARGE framed print is the absolute visual anchor, hung prominently centered on the main wall and occupying 65-80% of the wall height. It dominates the composition unmistakably — the eye goes to the artwork first, every other element is small and strictly secondary.`,
       `Frame: thin, ${FRAME_DESCRIPTIONS[frame]}, intentionally chosen to harmonize with the room's palette and decor.`,
       FINISH_CONSTRAINTS,
       ARTWORK_FIDELITY,

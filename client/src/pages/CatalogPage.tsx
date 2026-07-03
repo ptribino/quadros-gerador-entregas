@@ -29,6 +29,30 @@ type StatusFilter =
 type GenFilter = "all" | "generated" | "in_progress" | "queued" | "failed" | "none";
 type SortKey = "sku" | "nome" | "potencial" | "status" | "geracao";
 type SortDir = "asc" | "desc";
+type StyleOverride =
+  | "auto"
+  | "goquadros_signature"
+  | "scandinavian"
+  | "japandi"
+  | "minimalist"
+  | "boho"
+  | "classic"
+  | "contemporary"
+  | "mid_century_br"
+  | "brazilian_modern";
+
+const STYLE_OVERRIDE_OPTIONS: ReadonlyArray<{ value: StyleOverride; label: string }> = [
+  { value: "auto", label: "Automático — padrão GoQuadros" },
+  { value: "goquadros_signature", label: "Padrão GoQuadros" },
+  { value: "scandinavian", label: "Escandinavo" },
+  { value: "japandi", label: "Japandi" },
+  { value: "minimalist", label: "Minimalista" },
+  { value: "boho", label: "Boho" },
+  { value: "classic", label: "Clássico" },
+  { value: "contemporary", label: "Contemporâneo" },
+  { value: "mid_century_br", label: "Mid-Century Brasileiro" },
+  { value: "brazilian_modern", label: "Brasil Moderno" },
+];
 
 const GEN_RANK: Record<GenFilter, number> = {
   // usado pra ordenar a coluna "Geração" (mais avançado → mais "pronto")
@@ -51,6 +75,7 @@ export default function CatalogPage() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [styleOverride, setStyleOverride] = useState<StyleOverride>("auto");
 
   const utils = trpc.useUtils();
   const categoriesQuery = trpc.catalog.listCategories.useQuery(undefined, {
@@ -460,12 +485,27 @@ export default function CatalogPage() {
             >
               Rejeitar
             </Button>
+            <Select value={styleOverride} onValueChange={(v) => setStyleOverride(v as StyleOverride)}>
+              <SelectTrigger className="w-56" title="Estilo de ambiente usado nas imagens lifestyle">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STYLE_OVERRIDE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               size="sm"
               variant="secondary"
               disabled={selectedIds.size === 0 || enqueueMutation.isPending}
               onClick={() =>
-                enqueueMutation.mutate({ productIds: Array.from(selectedIds) })
+                enqueueMutation.mutate({
+                  productIds: Array.from(selectedIds),
+                  styleOverride: styleOverride === "auto" ? undefined : styleOverride,
+                })
               }
               title="Enfileira os selecionados para gerar 3 imagens cada (lifestyle + profissional + mockup)"
             >

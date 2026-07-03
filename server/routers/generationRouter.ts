@@ -16,6 +16,7 @@ const ROOM_TYPES = [
   'gourmet_area',
 ] as const;
 const STYLE_TYPES = [
+  'goquadros_signature',
   'scandinavian',
   'japandi',
   'minimalist',
