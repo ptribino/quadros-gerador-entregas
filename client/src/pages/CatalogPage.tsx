@@ -54,6 +54,10 @@ const STYLE_OVERRIDE_OPTIONS: ReadonlyArray<{ value: StyleOverride; label: strin
   { value: "brazilian_modern", label: "Brasil Moderno" },
 ];
 
+// Sentinel pro Select de subpasta — Radix não aceita value="" em SelectItem
+// (reservado internamente pra "sem seleção").
+const SUBFOLDER_ALL = "__all__";
+
 const GEN_RANK: Record<GenFilter, number> = {
   // usado pra ordenar a coluna "Geração" (mais avançado → mais "pronto")
   all: 0,
@@ -68,6 +72,7 @@ export default function CatalogPage() {
   const { user, loading: authLoading } = useAuth();
   const [categoryId, setCategoryId] = useState<string>("");
   const [folderId, setFolderId] = useState<string>("");
+  const [subFolderId, setSubFolderId] = useState<string>(SUBFOLDER_ALL);
   const [count, setCount] = useState<number>(15);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("suggested");
   const [genFilter, setGenFilter] = useState<GenFilter>("all");
@@ -85,6 +90,15 @@ export default function CatalogPage() {
   const foldersQuery = trpc.catalog.listBankFolders.useQuery(undefined, {
     enabled: Boolean(user),
   });
+  const categoryRootFolderId = useMemo(() => {
+    if (!categoryId || !foldersQuery.data || !categoriesQuery.data) return undefined;
+    const cat = categoriesQuery.data.find((c) => c.id === Number(categoryId));
+    return cat && foldersQuery.data.find((f) => f.name === cat.folderName)?.id;
+  }, [categoryId, foldersQuery.data, categoriesQuery.data]);
+  const subFoldersQuery = trpc.catalog.listBankFolders.useQuery(
+    { parentFolderId: categoryRootFolderId },
+    { enabled: Boolean(user) && Boolean(categoryRootFolderId) },
+  );
   const productsQuery = trpc.catalog.listSuggestions.useQuery(
     {
       status: statusFilter === "all" ? undefined : (statusFilter as any),
@@ -312,6 +326,15 @@ export default function CatalogPage() {
     // pra deixar claro que o usuário precisa colar o folderId manualmente
     // (categorias marcadas "(sem pasta)").
     setFolderId(folder ? folder.id : "");
+    // Nova categoria = reseta a escolha de subpasta da categoria anterior.
+    setSubFolderId(SUBFOLDER_ALL);
+  };
+
+  const handleSelectSubFolder = (id: string) => {
+    setSubFolderId(id);
+    // SUBFOLDER_ALL = "Todas as subpastas" -> volta a apontar pra pasta-mãe
+    // da categoria (suggestProducts já mergulha recursivamente nas subpastas).
+    setFolderId(id === SUBFOLDER_ALL ? categoryRootFolderId ?? "" : id);
   };
 
   const toggleSelect = (id: number) => {
@@ -361,7 +384,7 @@ export default function CatalogPage() {
         <CardHeader>
           <CardTitle className="text-base">Gerar sugestões por categoria</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-[1fr,1fr,120px,auto]">
+        <CardContent className="grid gap-4 sm:grid-cols-[1fr,1fr,1fr,110px,auto]">
           <div className="space-y-1">
             <Label>Categoria</Label>
             <Select value={categoryId} onValueChange={handleSelectCategory}>
@@ -381,10 +404,42 @@ export default function CatalogPage() {
             </Select>
           </div>
           <div className="space-y-1">
+            <Label>Subpasta (opcional)</Label>
+            <Select
+              value={subFolderId}
+              onValueChange={handleSelectSubFolder}
+              disabled={!categoryRootFolderId}
+            >
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={
+                    !categoryId
+                      ? "Selecione uma categoria primeiro"
+                      : subFoldersQuery.isLoading
+                        ? "Carregando..."
+                        : "Todas as subpastas"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SUBFOLDER_ALL}>Todas as subpastas</SelectItem>
+                {subFoldersQuery.data?.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
             <Label>Folder ID (auto-preenchido)</Label>
             <Input
               value={folderId}
-              onChange={(e) => setFolderId(e.target.value)}
+              onChange={(e) => {
+                setFolderId(e.target.value);
+                // Edição manual do ID invalida a escolha de subpasta (deixa de bater com o valor).
+                setSubFolderId(SUBFOLDER_ALL);
+              }}
               placeholder="ID da pasta no Drive"
             />
           </div>

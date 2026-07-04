@@ -96,6 +96,31 @@ function toTrayImageUrl(saved: string | null | undefined): string {
   return googleDriveService.publicDownloadUrl(extractDriveFileId(saved));
 }
 
+/**
+ * Valor exato aceito pelo campo "Quando acabar o estoque" da Tray (dicionário
+ * oficial de campos de importação/exportação de produto). Compartilhado entre
+ * `exportTrayImport` (nível produto) e `exportTrayVariations` (nível variação).
+ */
+const QUANDO_ACABAR_ESTOQUE = "Manter ativo, mas não permitir vendas";
+
+/**
+ * Defaults operacionais fixos pro export de importação Tray (`exportTrayImport`)
+ * — confirmados com a Priscila em 2026-07-04. Aplicados a TODO produto
+ * exportado, independente do que estiver salvo em precoVenda/precoCusto/
+ * pesoGramas/dimensões no DB (esses campos no DB continuam existindo pra
+ * outros usos, mas a loja padronizou esses valores pra loja toda).
+ */
+const TRAY_EXPORT_DEFAULTS = {
+  precoVenda: 255.5,
+  precoCusto: 73.0,
+  pesoGramas: 2470,
+  comprimentoCm: 65,
+  larguraCm: 45,
+  alturaCm: 9,
+  mensagemAdicional: "Este quadro não tem opção do acabamento vidro.",
+  quandoAcabarEstoque: QUANDO_ACABAR_ESTOQUE,
+} as const;
+
 /** Escapa HTML para uso seguro dentro de atributos/texto (nome vem de IA ou edição manual). */
 function escapeHtml(text: string): string {
   return text
@@ -474,7 +499,13 @@ export const catalogRouter = router({
         .filter((r) => !r.p.imageUrl1)
         .map((r) => ({ id: r.p.id, sku: r.p.sku, nome: r.p.nome }));
 
-      // Layout EXATO do template oficial de importação da Tray (30 colunas).
+      // Layout do template oficial de importação da Tray (30 colunas
+      // originais, validadas por importação manual bem-sucedida no painel)
+      // + 2 colunas extras (31-32) confirmadas no dicionário oficial de
+      // campos da Tray em 2026-07-04: "Mensagem adicional" e "Quando acabar
+      // o estoque" existem como campos reais de produto (não só de
+      // variação). A Tray casa colunas pelo texto do header — por isso os
+      // headers abaixo usam o nome EXATO de cada campo no dicionário oficial.
       // Colunas 1 e 2 ("Código do produto (ID)" e "Código da categoria
       // principal (ID)") são numéricas — deixadas em branco para criar
       // produtos novos (Tray gera os IDs); preencher só ao atualizar.
@@ -512,6 +543,8 @@ export const catalogRouter = router({
         { header: "Nome da categoria - nível 1", key: "catN1", width: 22 },               // 28
         { header: "Nome da categoria - nível 2", key: "catN2", width: 22 },               // 29
         { header: "Exibir na loja", key: "naLoja", width: 12 },                           // 30
+        { header: "Mensagem adicional", key: "mensagemAdicional", width: 50 },            // 31
+        { header: "Quando acabar o estoque", key: "quandoAcabarEstoque", width: 22 },     // 32
       ];
       ws.getRow(1).font = { bold: true };
 
@@ -528,20 +561,19 @@ export const catalogRouter = router({
           catId: null,
           nome: p.nome,
           html: p.descricaoHtml ?? "",
-          // Ordem (pipeline novo):
-          //   1 = arte original web-fit (sem moldura/ambiente)
-          //   2 = lifestyle 1
-          //   3 = lifestyle 2
-          //   4 = mockup
-          // Produtos gerados ANTES dessa mudança têm ordem antiga
-          // (1 = lifestyle, 4 = referência de tamanhos) — precisam ser
-          // re-gerados pra ficarem no formato novo.
-          img1: toTrayImageUrl(p.imageUrl1),
-          img2: toTrayImageUrl(p.imageUrl2),
-          img3: toTrayImageUrl(p.imageUrl3),
-          img4: toTrayImageUrl(p.imageUrl4),
-          precoVenda: Number(p.precoVenda),
-          peso: p.pesoGramas,
+          // Ordem pedida pela Priscila (2026-07-04): a arte original web-fit
+          // (antes a 1ª imagem) vira a ÚLTIMA; lifestyle 1/2 e mockup sobem
+          // uma posição cada.
+          //   1 = lifestyle 1        (era imageUrl2)
+          //   2 = lifestyle 2        (era imageUrl3)
+          //   3 = mockup             (era imageUrl4)
+          //   4 = arte original web-fit, sem moldura/ambiente (era imageUrl1)
+          img1: toTrayImageUrl(p.imageUrl2),
+          img2: toTrayImageUrl(p.imageUrl3),
+          img3: toTrayImageUrl(p.imageUrl4),
+          img4: toTrayImageUrl(p.imageUrl1),
+          precoVenda: TRAY_EXPORT_DEFAULTS.precoVenda,
+          peso: TRAY_EXPORT_DEFAULTS.pesoGramas,
           estoque: p.estoque,
           estoqueMin: 5,
           seloDestaque: 0,
@@ -551,10 +583,10 @@ export const catalogRouter = router({
           modelo: p.modelo ?? p.sku,
           sku: p.sku,
           garantia: p.tempoGarantia,
-          precoCusto: Number(p.precoCusto),
-          comprimento: Number(p.comprimentoCm),
-          largura: Number(p.larguraCm),
-          altura: Number(p.alturaCm),
+          precoCusto: TRAY_EXPORT_DEFAULTS.precoCusto,
+          comprimento: TRAY_EXPORT_DEFAULTS.comprimentoCm,
+          largura: TRAY_EXPORT_DEFAULTS.larguraCm,
+          altura: TRAY_EXPORT_DEFAULTS.alturaCm,
           seoTitulo: p.nome,
           seoDesc,
           seoKeywords: p.aiPalavrasChave ?? "",
@@ -562,6 +594,8 @@ export const catalogRouter = router({
           catN1: c?.trayCategoriaPrincipal ?? "Temas",
           catN2: c?.traySubcategoria ?? "",
           naLoja: p.exibirNaLoja ? "Sim" : "Não",
+          mensagemAdicional: TRAY_EXPORT_DEFAULTS.mensagemAdicional,
+          quandoAcabarEstoque: TRAY_EXPORT_DEFAULTS.quandoAcabarEstoque,
         });
       }
 
@@ -882,9 +916,9 @@ ${cardsHtml}
 
       // Estoque mínimo para aviso e comportamento ao esgotar, constantes
       // para todas as variações — valores confirmados na importação manual
-      // que funcionou no painel da Tray.
+      // que funcionou no painel da Tray. QUANDO_ACABAR_ESTOQUE é compartilhada
+      // com `exportTrayImport` (mesmo valor no nível produto e variação).
       const ESTOQUE_MINIMO_AVISO = 5;
-      const QUANDO_ACABAR_ESTOQUE = "Manter ativo, mas não permitir vendas";
       const TIPO_VARIACAO_1 = "Moldura";
       const TIPO_VARIACAO_2 = "Tamanho";
 
