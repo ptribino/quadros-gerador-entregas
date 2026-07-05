@@ -58,6 +58,25 @@ const STYLE_OVERRIDE_OPTIONS: ReadonlyArray<{ value: StyleOverride; label: strin
 // (reservado internamente pra "sem seleção").
 const SUBFOLDER_ALL = "__all__";
 
+const STATUS_ORDER: readonly Exclude<StatusFilter, "all">[] = [
+  "suggested",
+  "approved",
+  "generating",
+  "generated",
+  "exported",
+  "rejected",
+  "error",
+];
+const STATUS_LABELS: Record<Exclude<StatusFilter, "all">, string> = {
+  suggested: "Sugeridos",
+  approved: "Aprovados",
+  generating: "Gerando",
+  generated: "Gerados",
+  exported: "Exportados",
+  rejected: "Rejeitados",
+  error: "Com erro",
+};
+
 const GEN_RANK: Record<GenFilter, number> = {
   // usado pra ordenar a coluna "Geração" (mais avançado → mais "pronto")
   all: 0,
@@ -81,7 +100,6 @@ export default function CatalogPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [styleOverride, setStyleOverride] = useState<StyleOverride>("auto");
-  const [catalogLinkBaseUrl, setCatalogLinkBaseUrl] = useState<string>("");
 
   const utils = trpc.useUtils();
   const categoriesQuery = trpc.catalog.listCategories.useQuery(undefined, {
@@ -99,9 +117,11 @@ export default function CatalogPage() {
     { parentFolderId: categoryRootFolderId },
     { enabled: Boolean(user) && Boolean(categoryRootFolderId) },
   );
+  // Sem filtro de status no servidor: busca todos os status da categoria
+  // selecionada de uma vez, pra dar pra mostrar a contagem por status E
+  // filtrar localmente sem precisar refazer a query a cada troca de filtro.
   const productsQuery = trpc.catalog.listSuggestions.useQuery(
     {
-      status: statusFilter === "all" ? undefined : (statusFilter as any),
       categoryCodeId: categoryId ? Number(categoryId) : undefined,
     },
     { enabled: Boolean(user) },
@@ -193,17 +213,6 @@ export default function CatalogPage() {
     reader.readAsDataURL(file);
   };
 
-  const exportCatalogHtmlMutation = trpc.catalog.exportCatalogHtml.useMutation({
-    onSuccess: (res) => {
-      const link = document.createElement("a");
-      link.href = `data:${res.mimeType};base64,${res.base64}`;
-      link.download = res.fileName;
-      link.click();
-      toast.success(`Catálogo HTML gerado com ${res.rows} produtos`);
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
   const exportTrayMutation = trpc.catalog.exportTrayImport.useMutation({
     onSuccess: (res) => {
       const skipped = res.skipped ?? [];
@@ -260,7 +269,6 @@ export default function CatalogPage() {
     0;
   trpc.catalog.listSuggestions.useQuery(
     {
-      status: statusFilter === "all" ? undefined : (statusFilter as any),
       categoryCodeId: categoryId ? Number(categoryId) : undefined,
     },
     {
@@ -269,11 +277,24 @@ export default function CatalogPage() {
     },
   );
 
+  // Contagem por status sobre TODOS os produtos da categoria (antes do
+  // filtro de status escolhido) — dá pra ver o volume de cada etapa do
+  // funil sem precisar trocar o filtro toda hora.
+  const statusCounts = useMemo(() => {
+    const counts = {} as Record<string, number>;
+    for (const p of productsQuery.data ?? []) {
+      counts[p.status] = (counts[p.status] ?? 0) + 1;
+    }
+    return counts;
+  }, [productsQuery.data]);
+
   const visibleProducts = useMemo(() => {
     const list = productsQuery.data ?? [];
+    const byStatus =
+      statusFilter === "all" ? list : list.filter((p) => p.status === statusFilter);
     const term = searchTerm.trim().toLowerCase();
     const bySearch = term
-      ? list.filter((p) => {
+      ? byStatus.filter((p) => {
           const haystack = [
             p.sku,
             p.nome,
@@ -286,7 +307,7 @@ export default function CatalogPage() {
             .toLowerCase();
           return haystack.includes(term);
         })
-      : list;
+      : byStatus;
     const filtered = genFilter === "all"
       ? bySearch
       : bySearch.filter((p) => classifyGen(p) === genFilter);
@@ -308,7 +329,7 @@ export default function CatalogPage() {
           return cmp(GEN_RANK[classifyGen(a)], GEN_RANK[classifyGen(b)]);
       }
     });
-  }, [productsQuery.data, genFilter, searchTerm, sortKey, sortDir]);
+  }, [productsQuery.data, statusFilter, genFilter, searchTerm, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -395,7 +416,7 @@ export default function CatalogPage() {
         <CardHeader>
           <CardTitle className="text-base">Gerar sugestões por categoria</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-[1fr,1fr,1fr,110px,auto]">
+        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_110px_auto]">
           <div className="space-y-1">
             <Label>Categoria</Label>
             <Select value={categoryId} onValueChange={handleSelectCategory}>
@@ -482,9 +503,9 @@ export default function CatalogPage() {
       </Card>
 
       <Card>
-        <CardHeader className="space-y-2 pb-3">
-          <div className="flex flex-row items-center justify-between gap-3 space-y-0">
-            <div className="min-w-0">
+        <CardHeader className="space-y-3 pb-3">
+          <div className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div className="min-w-0 space-y-1.5">
               <CardTitle className="text-base">Sugestões</CardTitle>
               <p className="text-xs text-muted-foreground">
                 {visibleProducts.length} produtos
@@ -493,6 +514,23 @@ export default function CatalogPage() {
                 )}{" "}
                 · {selectedIds.size} selecionado(s)
               </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {STATUS_ORDER.filter((s) => statusCounts[s]).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
+                    className={`rounded-full px-2 py-0.5 text-[11px] ring-1 transition-colors ${
+                      statusFilter === s
+                        ? "bg-foreground text-background ring-foreground"
+                        : "bg-muted/50 text-muted-foreground ring-border hover:bg-muted"
+                    }`}
+                    title={`Filtrar por ${STATUS_LABELS[s]}`}
+                  >
+                    {STATUS_LABELS[s]}: {statusCounts[s]}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <Input
@@ -531,64 +569,81 @@ export default function CatalogPage() {
               </Select>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={selectAll}>
-              Selecionar todos
-            </Button>
-            <Button size="sm" variant="outline" onClick={clearSelection}>
-              Limpar
-            </Button>
-            <Button
-              size="sm"
-              disabled={selectedIds.size === 0 || updateStatusMutation.isPending}
-              onClick={() =>
-                updateStatusMutation.mutate({
-                  productIds: Array.from(selectedIds),
-                  status: "approved",
-                })
-              }
-            >
-              Aprovar
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              disabled={selectedIds.size === 0 || updateStatusMutation.isPending}
-              onClick={() =>
-                updateStatusMutation.mutate({
-                  productIds: Array.from(selectedIds),
-                  status: "rejected",
-                })
-              }
-            >
-              Rejeitar
-            </Button>
-            <Select value={styleOverride} onValueChange={(v) => setStyleOverride(v as StyleOverride)}>
-              <SelectTrigger className="w-56" title="Estilo de ambiente usado nas imagens lifestyle">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STYLE_OVERRIDE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={selectedIds.size === 0 || enqueueMutation.isPending}
-              onClick={() =>
-                enqueueMutation.mutate({
-                  productIds: Array.from(selectedIds),
-                  styleOverride: styleOverride === "auto" ? undefined : styleOverride,
-                })
-              }
-              title="Enfileira os selecionados para gerar 3 imagens cada (lifestyle + profissional + mockup)"
-            >
-              {enqueueMutation.isPending ? "..." : "Gerar imagens"}
-            </Button>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {/* Seleção */}
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={selectAll}>
+                Selecionar todos
+              </Button>
+              <Button size="sm" variant="outline" onClick={clearSelection}>
+                Limpar
+              </Button>
+            </div>
+
+            <div className="h-6 w-px bg-border" />
+
+            {/* Aprovação/rejeição da curadoria */}
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                disabled={selectedIds.size === 0 || updateStatusMutation.isPending}
+                onClick={() =>
+                  updateStatusMutation.mutate({
+                    productIds: Array.from(selectedIds),
+                    status: "approved",
+                  })
+                }
+              >
+                Aprovar
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={selectedIds.size === 0 || updateStatusMutation.isPending}
+                onClick={() =>
+                  updateStatusMutation.mutate({
+                    productIds: Array.from(selectedIds),
+                    status: "rejected",
+                  })
+                }
+              >
+                Rejeitar
+              </Button>
+            </div>
+
+            <div className="h-6 w-px bg-border" />
+
+            {/* Geração de imagens */}
+            <div className="flex items-center gap-2">
+              <Select value={styleOverride} onValueChange={(v) => setStyleOverride(v as StyleOverride)}>
+                <SelectTrigger className="w-56" title="Estilo de ambiente usado nas imagens lifestyle">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STYLE_OVERRIDE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={selectedIds.size === 0 || enqueueMutation.isPending}
+                onClick={() =>
+                  enqueueMutation.mutate({
+                    productIds: Array.from(selectedIds),
+                    styleOverride: styleOverride === "auto" ? undefined : styleOverride,
+                  })
+                }
+                title="Enfileira os selecionados para gerar 3 imagens cada (lifestyle + profissional + mockup)"
+              >
+                {enqueueMutation.isPending ? "..." : "Gerar imagens"}
+              </Button>
+            </div>
+
+            {/* Exportação — fluxo Tray */}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
@@ -619,30 +674,6 @@ export default function CatalogPage() {
                 title="Planilha pronta para importar na Tray (formato 30 colunas)"
               >
                 {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
-              </Button>
-              <Input
-                value={catalogLinkBaseUrl}
-                onChange={(e) => setCatalogLinkBaseUrl(e.target.value)}
-                placeholder="URL da loja p/ linkar (ex: https://sualoja.com.br/)"
-                className="w-64"
-                title="Prefixo usado para linkar cada card do catálogo à página do produto na Tray (concatena com o slug SEO). Deixe em branco para gerar só imagens sem link."
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={exportCatalogHtmlMutation.isPending}
-                onClick={() =>
-                  exportCatalogHtmlMutation.mutate({
-                    ...(selectedIds.size > 0
-                      ? { productIds: Array.from(selectedIds) }
-                      : { categoryCodeId: categoryId ? Number(categoryId) : undefined }),
-                    showPrice: false,
-                    linkBaseUrl: catalogLinkBaseUrl.trim() || undefined,
-                  })
-                }
-                title="Página HTML autocontida com a galeria dos quadros já cadastrados (foto web de cada produto) — cole no editor de HTML de uma página da Tray"
-              >
-                {exportCatalogHtmlMutation.isPending ? "..." : "Exportar Catálogo (HTML)"}
               </Button>
               <input
                 ref={trayVariationsInputRef}
