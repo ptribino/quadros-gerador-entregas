@@ -167,6 +167,17 @@ export default function CatalogPage() {
             { duration: 8000 },
           );
         }
+        if (res.skusSemMockupPorMoldura.length > 0) {
+          const preview = res.skusSemMockupPorMoldura.slice(0, 3).join(", ");
+          const suffix =
+            res.skusSemMockupPorMoldura.length > 3
+              ? `, +${res.skusSemMockupPorMoldura.length - 3}`
+              : "";
+          toast.warning(
+            `${res.skusSemMockupPorMoldura.length} produto(s) sem mockup por moldura (gerados antes dessa mudança) — variações sem imagem: ${preview}${suffix}`,
+            { duration: 8000 },
+          );
+        }
       },
       onError: (err) => toast.error(err.message),
     });

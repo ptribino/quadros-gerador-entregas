@@ -126,6 +126,15 @@ export const products = mysqlTable(
     imageUrl4: text("imageUrl4"),
     imageUrl5: text("imageUrl5"),
 
+    // Mockup gerado para cada cor de moldura (Etapa 4 do pipeline) — usados
+    // como "imagem principal da variação" na planilha de variações Tray,
+    // pra que cada opção de moldura (Amadeirado claro/escuro, Branca, Preta)
+    // mostre a foto do produto montado naquela cor específica.
+    mockupUrlLightWood: text("mockupUrlLightWood"),
+    mockupUrlDarkWood: text("mockupUrlDarkWood"),
+    mockupUrlWhite: text("mockupUrlWhite"),
+    mockupUrlBlack: text("mockupUrlBlack"),
+
     // Metadados da curadoria por IA (Etapa 1)
     aiPotencialVenda: int("aiPotencialVenda"),
     aiPalavrasChave: text("aiPalavrasChave"),

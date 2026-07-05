@@ -9,6 +9,7 @@ import { analyzeImageForCatalog, buildSku, buildSlug } from "../services/catalog
 import { getDb } from "../db";
 import { categoryCodes, products, productStatusEnum } from "../../drizzle/schema";
 import { ENV } from "../_core/env";
+import type { FrameType } from "../services/catalogPipeline";
 
 // Mesmo conjunto de StyleType do promptAgentService — repetido como tupla
 // literal aqui pra alimentar o z.enum (mesmo padrão usado em generationRouter.ts).
@@ -715,7 +716,9 @@ ${cardsHtml}
    */
   exportTrayVariations: protectedProcedure
     .input(z.object({ fileBase64: z.string().min(1) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const db = await requireDb();
+
       // Matrix fixo: 4 molduras × 8 tamanhos = 32 variações por produto.
       // Altura constante 9cm; largura e comprimento da embalagem crescem
       // com o tamanho do quadro (tabela operacional da Qtok Quadros).
@@ -725,6 +728,16 @@ ${cardsHtml}
         "Branca",
         "Preta",
       ] as const;
+      // Relaciona cada nome de moldura (valor da variação, como aparece na
+      // Tray) com o FrameType usado pelo pipeline pra gerar o mockup
+      // correspondente — é essa relação que resolve qual foto vai em
+      // "Endereço da imagem principal da variação" de cada linha.
+      const MOLDURA_TO_FRAME: Record<(typeof MOLDURAS)[number], FrameType> = {
+        "Amadeirado claro": "light_wood",
+        "Amadeirado escuro": "dark_wood",
+        "Branca": "white",
+        "Preta": "black",
+      };
       type SizeRow = {
         nome: string;
         altura: number;
@@ -914,6 +927,39 @@ ${cardsHtml}
         });
       }
 
+      // Busca os mockups por cor de moldura de cada produto (gerados na
+      // Etapa 4 do pipeline) pra preencher a imagem de cada variação.
+      const skus = pairs.map((p) => p.sku);
+      const mockupRows = await db
+        .select({
+          sku: products.sku,
+          mockupUrlLightWood: products.mockupUrlLightWood,
+          mockupUrlDarkWood: products.mockupUrlDarkWood,
+          mockupUrlWhite: products.mockupUrlWhite,
+          mockupUrlBlack: products.mockupUrlBlack,
+        })
+        .from(products)
+        .where(and(eq(products.userId, ctx.user.id), inArray(products.sku, skus)));
+
+      const mockupBySku = new Map<string, Record<FrameType, string | null>>(
+        mockupRows.map((r) => [
+          r.sku,
+          {
+            light_wood: r.mockupUrlLightWood,
+            dark_wood: r.mockupUrlDarkWood,
+            white: r.mockupUrlWhite,
+            black: r.mockupUrlBlack,
+          },
+        ]),
+      );
+      // Produtos gerados antes desta feature não têm mockup por moldura —
+      // a linha da variação fica sem imagem (Tray usa a imagem principal do
+      // produto como fallback), mas avisamos a usuária pra ela saber que
+      // precisa re-gerar esses produtos se quiser a foto por moldura.
+      const skusSemMockupPorMoldura = pairs
+        .filter((p) => !mockupBySku.get(p.sku))
+        .map((p) => p.sku);
+
       // Estoque mínimo para aviso e comportamento ao esgotar, constantes
       // para todas as variações — valores confirmados na importação manual
       // que funcionou no painel da Tray. QUANDO_ACABAR_ESTOQUE é compartilhada
@@ -937,6 +983,7 @@ ${cardsHtml}
         { header: "Nome da variação 2 (exemplo: Tamanho)",   key: "nome2",       width: 18 },
         { header: "Tipo da variação 1 (exemplo: Moldura)",   key: "tipo1",       width: 16 },
         { header: "Tipo da variação 2 (exemplo: Tamanho)",   key: "tipo2",       width: 14 },
+        { header: "Endereço da imagem principal da variação",key: "imagem",     width: 60 },
         { header: "Estoque da variação",                     key: "estoque",     width: 12 },
         { header: "Estoque mínimo para aviso",               key: "estoqueMin",  width: 16 },
         { header: "Quando acabar o estoque",                 key: "quandoAcabar",width: 20 },
@@ -949,12 +996,15 @@ ${cardsHtml}
       wsOut.getRow(1).eachCell({ includeEmpty: false }, (cell) => {
         cell.numFmt = "@";
       });
-      for (const key of ["nome1", "nome2", "tipo1", "tipo2", "quandoAcabar"]) {
+      for (const key of ["nome1", "nome2", "tipo1", "tipo2", "imagem", "quandoAcabar"]) {
         wsOut.getColumn(key).numFmt = "@";
       }
 
-      for (const { trayId } of pairs) {
+      for (const { sku, trayId } of pairs) {
+        const frameImages = mockupBySku.get(sku);
         for (const moldura of MOLDURAS) {
+          const frame = MOLDURA_TO_FRAME[moldura];
+          const imagem = toTrayImageUrl(frameImages?.[frame]);
           for (const tam of TAMANHOS) {
             wsOut.addRow({
               produtoId: Math.trunc(trayId),
@@ -963,6 +1013,7 @@ ${cardsHtml}
               nome2: tam.nome,
               tipo1: TIPO_VARIACAO_1,
               tipo2: TIPO_VARIACAO_2,
+              imagem,
               estoque: ESTOQUE_POR_VARIACAO,
               estoqueMin: ESTOQUE_MINIMO_AVISO,
               quandoAcabar: QUANDO_ACABAR_ESTOQUE,
@@ -986,6 +1037,7 @@ ${cardsHtml}
         rows: pairs.length * MOLDURAS.length * TAMANHOS.length,
         products: pairs.length,
         skipped: skippedSkus,
+        skusSemMockupPorMoldura,
       };
     }),
 

@@ -124,6 +124,10 @@ async function processOne(): Promise<boolean> {
         imageUrl2: result.imageUrls[1],
         imageUrl3: result.imageUrls[2],
         imageUrl4: result.imageUrls[3] ?? null, // referência de tamanhos (se config setada)
+        mockupUrlLightWood: result.mockupUrls.light_wood ?? null,
+        mockupUrlDarkWood: result.mockupUrls.dark_wood ?? null,
+        mockupUrlWhite: result.mockupUrls.white ?? null,
+        mockupUrlBlack: result.mockupUrls.black ?? null,
         genCompletedAt: new Date(),
         genStep: 3,
         status: "generated",

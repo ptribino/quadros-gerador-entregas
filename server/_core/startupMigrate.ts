@@ -263,6 +263,11 @@ async function ensureSchema(pool: mysql.Pool) {
     "ALTER TABLE products ADD COLUMN genStep int NULL",
     "ALTER TABLE products ADD COLUMN genAttempts int NOT NULL DEFAULT 0",
     "ALTER TABLE products ADD COLUMN genError text NULL",
+    // Mockup por cor de moldura — usados na planilha de variações Tray.
+    "ALTER TABLE products ADD COLUMN mockupUrlLightWood text NULL",
+    "ALTER TABLE products ADD COLUMN mockupUrlDarkWood text NULL",
+    "ALTER TABLE products ADD COLUMN mockupUrlWhite text NULL",
+    "ALTER TABLE products ADD COLUMN mockupUrlBlack text NULL",
   ]) {
     try {
       await pool.query(stmt);

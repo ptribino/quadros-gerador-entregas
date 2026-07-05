@@ -67,6 +67,8 @@ export interface PipelineResult {
   productFolderId: string;
   productFolderUrl: string;
   imageUrls: string[]; // URLs públicas das 3 imagens geradas (lifestyle, profissional, mockup)
+  /** URL do mockup gerado para CADA cor de moldura — 1 por FrameType. */
+  mockupUrls: Record<FrameType, string>;
 }
 
 /** Sorteia um item de uma lista. */
@@ -317,34 +319,42 @@ export async function runForProduct(
   await googleDriveService.makePublic(accessToken, proFile.id);
   await onProgress?.(2, `lifestyle ${frame}/${proRoom}/${proStyle}`);
 
-  // ETAPA 4 — Mockup
-  const mockRaw = await generateMockup(frame, referenceDataUrl);
-  const mock = await fitForEcommerce(mockRaw.buffer);
-  const mockFile = await googleDriveService.uploadFileReplacing(
-    accessToken,
-    `${product.sku}-mockup.jpg`,
-    mock.buffer,
-    mock.mimeType,
-    mockupFolder.id,
-  );
-  await googleDriveService.makePublic(accessToken, mockFile.id);
-  await onProgress?.(3, `mockup ${frame}`);
+  // ETAPA 4 — Mockups: UMA imagem por cor de moldura (não só a sorteada
+  // pra coerência com as lifestyles). São essas 4 fotos que viram a "imagem
+  // principal da variação" de cada opção de Moldura na planilha de
+  // variações Tray (ex: "Preta" → foto do mockup na moldura preta).
+  const mockupUrls = {} as Record<FrameType, string>;
+  for (const mockupFrame of FRAMES) {
+    const mockRaw = await generateMockup(mockupFrame, referenceDataUrl);
+    const mock = await fitForEcommerce(mockRaw.buffer);
+    const mockFile = await googleDriveService.uploadFileReplacing(
+      accessToken,
+      `${product.sku}-mockup-${mockupFrame}.jpg`,
+      mock.buffer,
+      mock.mimeType,
+      mockupFolder.id,
+    );
+    await googleDriveService.makePublic(accessToken, mockFile.id);
+    mockupUrls[mockupFrame] = googleDriveService.publicDownloadUrl(mockFile.id);
+  }
+  await onProgress?.(3, `mockups (${FRAMES.join(", ")})`);
 
   // Ordem das imagens na planilha Tray:
   //   imageUrls[0] = arte original web-fit (sem moldura/ambiente) — imagem principal
   //   imageUrls[1] = lifestyle 1
   //   imageUrls[2] = lifestyle 2
-  //   imageUrls[3] = mockup
+  //   imageUrls[3] = mockup — usa a moldura escolhida pra coerência com as lifestyles
   const imageUrls = [
     googleDriveService.publicDownloadUrl(originalWebFile.id),
     googleDriveService.publicDownloadUrl(lifeFile.id),
     googleDriveService.publicDownloadUrl(proFile.id),
-    googleDriveService.publicDownloadUrl(mockFile.id),
+    mockupUrls[frame],
   ];
 
   return {
     productFolderId: productFolder.id,
     productFolderUrl: productFolder.webViewLink,
     imageUrls,
+    mockupUrls,
   };
 }
