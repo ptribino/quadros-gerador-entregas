@@ -177,6 +177,21 @@ async function generateMockup(
   return runGeneration(prompt, referenceDataUrl, `mockup/${frame}`);
 }
 
+/**
+ * Deriva um mockup em OUTRA cor de moldura a partir de um mockup JÁ
+ * GERADO (não a arte crua) — repinta só a moldura, preservando ângulo,
+ * corte, luz e profundidade da foto-base. Gerar cada cor do zero a partir
+ * da arte crua produzia fotos visivelmente diferentes entre as 4 cores
+ * (câmera, corte, até a arte renderizada de forma distinta).
+ */
+async function recolorMockup(
+  toFrame: FrameType,
+  baseMockupDataUrl: string,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const prompt = promptAgentService.buildMockupRecolorPrompt(toFrame);
+  return runGeneration(prompt, baseMockupDataUrl, `mockup-recolor/${toFrame}`);
+}
+
 async function runGeneration(
   prompt: string,
   referenceDataUrl: string,
@@ -319,23 +334,42 @@ export async function runForProduct(
   await googleDriveService.makePublic(accessToken, proFile.id);
   await onProgress?.(2, `lifestyle ${frame}/${proRoom}/${proStyle}`);
 
-  // ETAPA 4 — Mockups: UMA imagem por cor de moldura (não só a sorteada
-  // pra coerência com as lifestyles). São essas 4 fotos que viram a "imagem
-  // principal da variação" de cada opção de Moldura na planilha de
-  // variações Tray (ex: "Preta" → foto do mockup na moldura preta).
+  // ETAPA 4 — Mockups: UMA imagem por cor de moldura. São essas 4 fotos
+  // que viram a "imagem principal da variação" de cada opção de Moldura na
+  // planilha de variações Tray (ex: "Preta" → foto do mockup na moldura
+  // preta). A 1ª (mesma moldura escolhida pra coerência com as lifestyles)
+  // é gerada a partir da arte crua; as outras 3 são DERIVADAS dessa mesma
+  // foto (repintando só a moldura) em vez de geradas do zero — gerar cada
+  // cor independentemente produzia fotos com ângulo/corte/profundidade
+  // diferentes entre si, quebrando a consistência da variação.
   const mockupUrls = {} as Record<FrameType, string>;
-  for (const mockupFrame of FRAMES) {
-    const mockRaw = await generateMockup(mockupFrame, referenceDataUrl);
-    const mock = await fitForEcommerce(mockRaw.buffer);
-    const mockFile = await googleDriveService.uploadFileReplacing(
+  const [baseFrame, ...otherFrames] = [frame, ...FRAMES.filter((f) => f !== frame)];
+
+  const baseRaw = await generateMockup(baseFrame, referenceDataUrl);
+  const baseReferenceDataUrl = `data:${baseRaw.mimeType};base64,${baseRaw.buffer.toString("base64")}`;
+  const baseFitted = await fitForEcommerce(baseRaw.buffer);
+  const baseFile = await googleDriveService.uploadFileReplacing(
+    accessToken,
+    `${product.sku}-mockup-${baseFrame}.jpg`,
+    baseFitted.buffer,
+    baseFitted.mimeType,
+    mockupFolder.id,
+  );
+  await googleDriveService.makePublic(accessToken, baseFile.id);
+  mockupUrls[baseFrame] = googleDriveService.publicDownloadUrl(baseFile.id);
+
+  for (const otherFrame of otherFrames) {
+    const recoloredRaw = await recolorMockup(otherFrame, baseReferenceDataUrl);
+    const recolored = await fitForEcommerce(recoloredRaw.buffer);
+    const file = await googleDriveService.uploadFileReplacing(
       accessToken,
-      `${product.sku}-mockup-${mockupFrame}.jpg`,
-      mock.buffer,
-      mock.mimeType,
+      `${product.sku}-mockup-${otherFrame}.jpg`,
+      recolored.buffer,
+      recolored.mimeType,
       mockupFolder.id,
     );
-    await googleDriveService.makePublic(accessToken, mockFile.id);
-    mockupUrls[mockupFrame] = googleDriveService.publicDownloadUrl(mockFile.id);
+    await googleDriveService.makePublic(accessToken, file.id);
+    mockupUrls[otherFrame] = googleDriveService.publicDownloadUrl(file.id);
   }
   await onProgress?.(3, `mockups (${FRAMES.join(", ")})`);
 

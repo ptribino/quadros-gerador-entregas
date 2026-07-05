@@ -118,6 +118,16 @@ const ARTWORK_FIDELITY = [
   'The artwork inside the frame must look pixel-faithful to the reference image.',
 ].join(' ');
 
+// Usado quando a referência de entrada já É um mockup gerado (não a arte
+// crua) — pede pro modelo repintar só a moldura, preservando ângulo, corte,
+// luz e a renderização da arte. Evita que cada cor saia como uma foto
+// diferente (câmera, crop e até a arte variando entre as 4 gerações).
+const MOCKUP_RECOLOR_FIDELITY = [
+  'This is a professional product photograph of a single framed print hanging on a wall — treat it as an EXACT visual reference, not inspiration.',
+  'CRITICAL — PIXEL-IDENTICAL REPRODUCTION: reproduce every pixel of this photo exactly as it is — same camera angle, same distance, same crop, same wall, same shadow, same lighting, and the exact same printed artwork inside the frame, unchanged in any way (same colors, same composition, same details).',
+  'Do NOT add, remove, resize, recrop, or move anything else in the photo.',
+].join(' ');
+
 // Material/finish constraints — aplicado em TODO prompt (lifestyle, mockup, vídeo).
 // Os quadros são impressos em papel sublimado fosco; nunca tem vidro.
 const FINISH_CONSTRAINTS = [
@@ -250,6 +260,22 @@ class PromptAgentService {
       FINISH_CONSTRAINTS,
       `Straight frontal view, perfectly centered. Soft uniform studio lighting from the front-left, very subtle shadow on the right side to give depth, no harsh shadows. Minimalist premium product photography.`,
       ARTWORK_FIDELITY,
+      `Aspect ratio 4:5.`,
+    ].join(' ');
+  }
+
+  /**
+   * Recolore a moldura de um mockup JÁ GERADO, mantendo tudo o resto
+   * idêntico (ângulo, corte, luz, profundidade, renderização da arte).
+   * Usado pelo pipeline pra derivar as outras 3 cores a partir da 1ª
+   * gerada, em vez de gerar cada cor do zero a partir da arte crua —
+   * gerar do zero produzia fotos visivelmente diferentes entre si.
+   */
+  buildMockupRecolorPrompt(toFrame: FrameType): string {
+    return [
+      MOCKUP_RECOLOR_FIDELITY,
+      `THE ONLY CHANGE ALLOWED: repaint the wood frame molding to ${FRAME_DESCRIPTIONS[toFrame]}. Same thin molding shape, same proportions, same construction — only its color/material finish changes.`,
+      FINISH_CONSTRAINTS,
       `Aspect ratio 4:5.`,
     ].join(' ');
   }
