@@ -72,7 +72,7 @@ const STATUS_LABELS: Record<Exclude<StatusFilter, "all">, string> = {
   approved: "Aprovados",
   generating: "Gerando",
   generated: "Gerados",
-  exported: "Exportados",
+  exported: "Cadastrado na Tray",
   rejected: "Rejeitados",
   error: "Com erro",
 };
@@ -504,71 +504,34 @@ export default function CatalogPage() {
 
       <Card>
         <CardHeader className="space-y-3 pb-3">
-          <div className="flex flex-row items-start justify-between gap-3 space-y-0">
-            <div className="min-w-0 space-y-1.5">
-              <CardTitle className="text-base">Sugestões</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {visibleProducts.length} produtos
-                {productsQuery.data && visibleProducts.length !== productsQuery.data.length && (
-                  <> de {productsQuery.data.length}</>
-                )}{" "}
-                · {selectedIds.size} selecionado(s)
-              </p>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {STATUS_ORDER.filter((s) => statusCounts[s]).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
-                    className={`rounded-full px-2 py-0.5 text-[11px] ring-1 transition-colors ${
-                      statusFilter === s
-                        ? "bg-foreground text-background ring-foreground"
-                        : "bg-muted/50 text-muted-foreground ring-border hover:bg-muted"
-                    }`}
-                    title={`Filtrar por ${STATUS_LABELS[s]}`}
-                  >
-                    {STATUS_LABELS[s]}: {statusCounts[s]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Input
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por SKU, nome, marca..."
-                className="w-56"
-              />
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="suggested">Sugeridos</SelectItem>
-                  <SelectItem value="approved">Aprovados</SelectItem>
-                  <SelectItem value="generating">Gerando</SelectItem>
-                  <SelectItem value="generated">Gerados</SelectItem>
-                  <SelectItem value="exported">Exportados</SelectItem>
-                  <SelectItem value="rejected">Rejeitados</SelectItem>
-                  <SelectItem value="error">Com erro</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={genFilter} onValueChange={(v) => setGenFilter(v as GenFilter)}>
-                <SelectTrigger className="w-44" title="Filtrar por status de geração de imagens">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Geração: todos</SelectItem>
-                  <SelectItem value="generated">✅ pronto</SelectItem>
-                  <SelectItem value="in_progress">⚙️ gerando</SelectItem>
-                  <SelectItem value="queued">⏳ na fila</SelectItem>
-                  <SelectItem value="failed">❌ falha</SelectItem>
-                  <SelectItem value="none">Não gerado</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="min-w-0 space-y-1.5">
+            <CardTitle className="text-base">Sugestões</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {visibleProducts.length} produtos
+              {productsQuery.data && visibleProducts.length !== productsQuery.data.length && (
+                <> de {productsQuery.data.length}</>
+              )}{" "}
+              · {selectedIds.size} selecionado(s)
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {STATUS_ORDER.filter((s) => statusCounts[s]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
+                  className={`rounded-full px-2 py-0.5 text-[11px] ring-1 transition-colors ${
+                    statusFilter === s
+                      ? "bg-foreground text-background ring-foreground"
+                      : "bg-muted/50 text-muted-foreground ring-border hover:bg-muted"
+                  }`}
+                  title={`Filtrar por ${STATUS_LABELS[s]}`}
+                >
+                  {STATUS_LABELS[s]}: {statusCounts[s]}
+                </button>
+              ))}
             </div>
           </div>
+
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             {/* Seleção */}
             <div className="flex items-center gap-2">
@@ -642,69 +605,122 @@ export default function CatalogPage() {
                 {enqueueMutation.isPending ? "..." : "Gerar imagens"}
               </Button>
             </div>
-
-            {/* Exportação — fluxo Tray */}
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={exportMutation.isPending}
-                onClick={() =>
-                  exportMutation.mutate(
-                    selectedIds.size > 0
-                      ? { productIds: Array.from(selectedIds) }
-                      : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
-                  )
-                }
-                title="Planilha interna com metadados da curadoria (descricaoHtml, potencial, palavras-chave)"
-              >
-                {exportMutation.isPending ? "..." : "Exportar curadoria"}
-              </Button>
-              <Button
-                size="sm"
-                variant="default"
-                disabled={exportTrayMutation.isPending}
-                onClick={() =>
-                  exportTrayMutation.mutate(
-                    selectedIds.size > 0
-                      ? { productIds: Array.from(selectedIds) }
-                      : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
-                  )
-                }
-                title="Planilha pronta para importar na Tray (formato 30 colunas)"
-              >
-                {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
-              </Button>
-              <input
-                ref={trayVariationsInputRef}
-                type="file"
-                accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                className="hidden"
-                onChange={(e) => {
-                  handleVariationsFilePick(e.target.files?.[0]);
-                  e.target.value = "";
-                }}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={exportTrayVariationsMutation.isPending}
-                onClick={() => trayVariationsInputRef.current?.click()}
-                title="Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 32 variações por produto: 4 molduras × 8 tamanhos."
-              >
-                {exportTrayVariationsMutation.isPending
-                  ? "..."
-                  : "Gerar variações"}
-              </Button>
-            </div>
           </div>
+
+          {/* Exportação — fluxo Tray */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Exportação:</span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={exportMutation.isPending}
+              onClick={() =>
+                exportMutation.mutate(
+                  selectedIds.size > 0
+                    ? { productIds: Array.from(selectedIds) }
+                    : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
+                )
+              }
+              title="Planilha interna com metadados da curadoria (descricaoHtml, potencial, palavras-chave)"
+            >
+              {exportMutation.isPending ? "..." : "Exportar curadoria"}
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              disabled={exportTrayMutation.isPending}
+              onClick={() =>
+                exportTrayMutation.mutate(
+                  selectedIds.size > 0
+                    ? { productIds: Array.from(selectedIds) }
+                    : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
+                )
+              }
+              title="Planilha pronta para importar na Tray (formato 30 colunas)"
+            >
+              {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
+            </Button>
+            <input
+              ref={trayVariationsInputRef}
+              type="file"
+              accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              onChange={(e) => {
+                handleVariationsFilePick(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={exportTrayVariationsMutation.isPending}
+              onClick={() => trayVariationsInputRef.current?.click()}
+              title="Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 32 variações por produto: 4 molduras × 8 tamanhos."
+            >
+              {exportTrayVariationsMutation.isPending ? "..." : "Gerar variações"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+              disabled={selectedIds.size === 0 || updateStatusMutation.isPending}
+              onClick={() =>
+                updateStatusMutation.mutate({
+                  productIds: Array.from(selectedIds),
+                  status: "exported",
+                })
+              }
+              title="Marca os selecionados como já importados na Tray com as variações cadastradas na loja"
+            >
+              {updateStatusMutation.isPending ? "..." : "Marcar como cadastrado"}
+            </Button>
+          </div>
+
           <div className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900 ring-1 ring-blue-100">
             <span className="font-medium">Como funciona:</span>{" "}
             (1) marque os produtos com <kbd className="rounded bg-white px-1 py-0.5 ring-1 ring-blue-200">checkbox</kbd>,{" "}
             (2) clique <strong>Aprovar</strong>,{" "}
             (3) com os mesmos produtos ainda marcados, clique <strong>Gerar imagens</strong> — o sistema gera 3 imagens por produto (~1.5 min cada) e salva na sua pasta do Drive.{" "}
             (4) Quando a coluna GERAÇÃO mostrar <strong className="text-emerald-600">✅ pronto</strong>, clique <strong>Exportar Tray</strong> e importe na sua loja.{" "}
-            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com 32 variações por produto (4 molduras × 8 tamanhos) pronto pra importar.
+            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com 32 variações por produto (4 molduras × 8 tamanhos) pronto pra importar.{" "}
+            Quando as variações já estiverem na loja, clique <strong>Marcar como cadastrado</strong>.
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por SKU, nome, marca..."
+              className="w-56"
+            />
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="suggested">Sugeridos</SelectItem>
+                <SelectItem value="approved">Aprovados</SelectItem>
+                <SelectItem value="generating">Gerando</SelectItem>
+                <SelectItem value="generated">Gerados</SelectItem>
+                <SelectItem value="exported">Cadastrado na Tray</SelectItem>
+                <SelectItem value="rejected">Rejeitados</SelectItem>
+                <SelectItem value="error">Com erro</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={genFilter} onValueChange={(v) => setGenFilter(v as GenFilter)}>
+              <SelectTrigger className="w-44" title="Filtrar por status de geração de imagens">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Geração: todos</SelectItem>
+                <SelectItem value="generated">✅ pronto</SelectItem>
+                <SelectItem value="in_progress">⚙️ gerando</SelectItem>
+                <SelectItem value="queued">⏳ na fila</SelectItem>
+                <SelectItem value="failed">❌ falha</SelectItem>
+                <SelectItem value="none">Não gerado</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">

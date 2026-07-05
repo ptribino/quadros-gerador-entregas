@@ -316,13 +316,18 @@ export const catalogRouter = router({
     .input(
       z.object({
         productIds: z.array(z.number().int().positive()).min(1).max(500),
-        status: z.enum(["approved", "rejected"]),
+        // "exported" = marcação manual de "Cadastrado na Tray" (produto já
+        // importado + variações geradas na loja) — não tem como detectar
+        // isso automaticamente porque a importação acontece no painel da
+        // Tray, fora do sistema.
+        status: z.enum(["approved", "rejected", "exported"]),
       }),
     )
     .mutation(async ({ input, ctx }) => {
       const db = await requireDb();
       const setClause: Record<string, unknown> = { status: input.status };
       if (input.status === "approved") setClause.approvedAt = new Date();
+      if (input.status === "exported") setClause.exportedAt = new Date();
 
       await db
         .update(products)
