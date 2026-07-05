@@ -105,6 +105,14 @@ function toTrayImageUrl(saved: string | null | undefined): string {
 const QUANDO_ACABAR_ESTOQUE = "Manter ativo, mas não permitir vendas";
 
 /**
+ * Preço de custo padrão e markup aplicados a TODO produto exportado — o
+ * preço de venda é sempre custo × markup, nunca um valor solto (confirmado
+ * com a Priscila em 2026-07-05: venda = custo × 3,5).
+ */
+const PRECO_CUSTO_PADRAO = 73.0;
+const MARKUP_VENDA = 3.5;
+
+/**
  * Defaults operacionais fixos pro export de importação Tray (`exportTrayImport`)
  * — confirmados com a Priscila em 2026-07-04. Aplicados a TODO produto
  * exportado, independente do que estiver salvo em precoVenda/precoCusto/
@@ -112,8 +120,8 @@ const QUANDO_ACABAR_ESTOQUE = "Manter ativo, mas não permitir vendas";
  * outros usos, mas a loja padronizou esses valores pra loja toda).
  */
 const TRAY_EXPORT_DEFAULTS = {
-  precoVenda: 255.5,
-  precoCusto: 73.0,
+  precoVenda: PRECO_CUSTO_PADRAO * MARKUP_VENDA,
+  precoCusto: PRECO_CUSTO_PADRAO,
   pesoGramas: 2470,
   comprimentoCm: 65,
   larguraCm: 45,
@@ -654,15 +662,18 @@ export const catalogRouter = router({
         comprimento: number;
         pesoGramas: number;
       };
+      // Pesos "embalado c/ moldura" da tabela de projeção de peso por
+      // medida (confirmado com a Priscila em 2026-07-05) — substitui a
+      // estimativa anterior.
       const TAMANHOS: SizeRow[] = [
-        { nome: "60cm x 40cm",   altura: 9, largura: 45,  comprimento: 65,  pesoGramas: 1500 },
-        { nome: "70cm x 50cm",   altura: 9, largura: 55,  comprimento: 75,  pesoGramas: 2000 },
-        { nome: "80cm x 55cm",   altura: 9, largura: 60,  comprimento: 85,  pesoGramas: 2500 },
-        { nome: "90cm x 60cm",   altura: 9, largura: 65,  comprimento: 95,  pesoGramas: 3000 },
-        { nome: "100cm x 70cm",  altura: 9, largura: 75,  comprimento: 105, pesoGramas: 3500 },
-        { nome: "120cm x 80cm",  altura: 9, largura: 85,  comprimento: 125, pesoGramas: 4500 },
-        { nome: "150cm x 100cm", altura: 9, largura: 105, comprimento: 155, pesoGramas: 6000 },
-        { nome: "160cm x 110cm", altura: 9, largura: 115, comprimento: 165, pesoGramas: 7000 },
+        { nome: "60cm x 40cm",   altura: 9, largura: 45,  comprimento: 65,  pesoGramas: 2470 },
+        { nome: "70cm x 50cm",   altura: 9, largura: 55,  comprimento: 75,  pesoGramas: 2950 },
+        { nome: "80cm x 55cm",   altura: 9, largura: 60,  comprimento: 85,  pesoGramas: 3330 },
+        { nome: "90cm x 60cm",   altura: 9, largura: 65,  comprimento: 95,  pesoGramas: 4020 },
+        { nome: "100cm x 70cm",  altura: 9, largura: 75,  comprimento: 105, pesoGramas: 4450 },
+        { nome: "120cm x 80cm",  altura: 9, largura: 85,  comprimento: 125, pesoGramas: 5560 },
+        { nome: "150cm x 100cm", altura: 9, largura: 105, comprimento: 155, pesoGramas: 7880 },
+        { nome: "160cm x 110cm", altura: 9, largura: 115, comprimento: 165, pesoGramas: 9000 },
       ];
       const ESTOQUE_POR_VARIACAO = 99;
 
@@ -882,6 +893,15 @@ export const catalogRouter = router({
       // os dados começam na coluna B com o ID numérico do produto pai —
       // não o SKU/Referência. "Código da variação (ID)" = 0 em todas as
       // linhas (Tray auto-gera o ID de cada variação nova).
+      //
+      // IMPORTANTE: a coluna de imagem fica DEPOIS de "peso" (última),
+      // nunca no meio. Colocá-la entre "tipo2" e "estoque" (como uma
+      // primeira tentativa fez) quebrou a importação — a Tray tratou o
+      // upload como se só tivesse 10 colunas (parou de ler exatamente em
+      // "Estoque mínimo para aviso" e devolveu erro em toda variação,
+      // "Invalid product" incluso). O mapeamento da Tray pra esse
+      // template parece ser por POSIÇÃO, não por nome de cabeçalho — só
+      // adicionar coluna no fim preserva as posições já validadas.
       const wbOut = new ExcelJS.Workbook();
       const wsOut = wbOut.addWorksheet("Worksheet");
       wsOut.columns = [
@@ -892,7 +912,6 @@ export const catalogRouter = router({
         { header: "Nome da variação 2 (exemplo: Tamanho)",   key: "nome2",       width: 18 },
         { header: "Tipo da variação 1 (exemplo: Moldura)",   key: "tipo1",       width: 16 },
         { header: "Tipo da variação 2 (exemplo: Tamanho)",   key: "tipo2",       width: 14 },
-        { header: "Endereço da imagem principal da variação",key: "imagem",     width: 60 },
         { header: "Estoque da variação",                     key: "estoque",     width: 12 },
         { header: "Estoque mínimo para aviso",               key: "estoqueMin",  width: 16 },
         { header: "Quando acabar o estoque",                 key: "quandoAcabar",width: 20 },
@@ -900,6 +919,7 @@ export const catalogRouter = router({
         { header: "Comprimento (cm)",                        key: "comprimento", width: 14 },
         { header: "Largura (cm)",                            key: "largura",     width: 12 },
         { header: "Peso da variação (gramas)",               key: "peso",        width: 16 },
+        { header: "Endereço da imagem principal da variação",key: "imagem",     width: 60 },
       ];
       wsOut.getRow(1).font = { bold: true };
       wsOut.getRow(1).eachCell({ includeEmpty: false }, (cell) => {
