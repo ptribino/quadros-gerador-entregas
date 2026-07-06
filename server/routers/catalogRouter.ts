@@ -677,19 +677,20 @@ export const catalogRouter = router({
         largura: number;
         comprimento: number;
         pesoGramas: number;
+        precoCusto: number;
       };
-      // Pesos "embalado c/ moldura" da tabela de projeção de peso por
-      // medida (confirmado com a Priscila em 2026-07-05) — substitui a
-      // estimativa anterior.
+      // Pesos "embalado c/ moldura" e preço de custo por medida (tabela
+      // confirmada com a Priscila em 2026-07-05) — preço de venda de cada
+      // variação é sempre custo × MARKUP_VENDA, igual ao produto principal.
       const TAMANHOS: SizeRow[] = [
-        { nome: "60cm x 40cm",   altura: 9, largura: 45,  comprimento: 65,  pesoGramas: 2470 },
-        { nome: "70cm x 50cm",   altura: 9, largura: 55,  comprimento: 75,  pesoGramas: 2950 },
-        { nome: "80cm x 55cm",   altura: 9, largura: 60,  comprimento: 85,  pesoGramas: 3330 },
-        { nome: "90cm x 60cm",   altura: 9, largura: 65,  comprimento: 95,  pesoGramas: 4020 },
-        { nome: "100cm x 70cm",  altura: 9, largura: 75,  comprimento: 105, pesoGramas: 4450 },
-        { nome: "120cm x 80cm",  altura: 9, largura: 85,  comprimento: 125, pesoGramas: 5560 },
-        { nome: "150cm x 100cm", altura: 9, largura: 105, comprimento: 155, pesoGramas: 7880 },
-        { nome: "160cm x 110cm", altura: 9, largura: 115, comprimento: 165, pesoGramas: 9000 },
+        { nome: "60cm x 40cm",   altura: 9, largura: 45,  comprimento: 65,  pesoGramas: 2470, precoCusto: 73.0 },
+        { nome: "70cm x 50cm",   altura: 9, largura: 55,  comprimento: 75,  pesoGramas: 2950, precoCusto: 100.0 },
+        { nome: "80cm x 55cm",   altura: 9, largura: 60,  comprimento: 85,  pesoGramas: 3330, precoCusto: 127.0 },
+        { nome: "90cm x 60cm",   altura: 9, largura: 65,  comprimento: 95,  pesoGramas: 4020, precoCusto: 165.0 },
+        { nome: "100cm x 70cm",  altura: 9, largura: 75,  comprimento: 105, pesoGramas: 4450, precoCusto: 196.0 },
+        { nome: "120cm x 80cm",  altura: 9, largura: 85,  comprimento: 125, pesoGramas: 5560, precoCusto: 242.0 },
+        { nome: "150cm x 100cm", altura: 9, largura: 105, comprimento: 155, pesoGramas: 7880, precoCusto: 300.0 },
+        { nome: "160cm x 110cm", altura: 9, largura: 115, comprimento: 165, pesoGramas: 9000, precoCusto: 318.0 },
       ];
       const ESTOQUE_POR_VARIACAO = 99;
 
@@ -935,6 +936,8 @@ export const catalogRouter = router({
         { header: "Comprimento (cm)",                        key: "comprimento", width: 14 },
         { header: "Largura (cm)",                            key: "largura",     width: 12 },
         { header: "Peso da variação (gramas)",               key: "peso",        width: 16 },
+        { header: "Preço de venda em reais",                 key: "precoVenda", width: 16 },
+        { header: "Preço de custo em reais",                 key: "precoCusto", width: 16 },
         { header: "Endereço da imagem principal da variação",key: "imagem",     width: 60 },
       ];
       wsOut.getRow(1).font = { bold: true };
@@ -966,6 +969,8 @@ export const catalogRouter = router({
               comprimento: tam.comprimento,
               largura: tam.largura,
               peso: tam.pesoGramas,
+              precoVenda: tam.precoCusto * MARKUP_VENDA,
+              precoCusto: tam.precoCusto,
             });
           }
         }
