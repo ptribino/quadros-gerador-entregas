@@ -118,6 +118,16 @@ const ARTWORK_FIDELITY = [
   'The artwork inside the frame must look pixel-faithful to the reference image.',
 ].join(' ');
 
+// Aplicado em TODO prompt que gera imagem/vídeo — sem isso o modelo já
+// chegou a desenhar "GOQUADROS" escrito na parede da cena (interpretou uma
+// referência de marca no prompt como texto pra renderizar). Nunca pode
+// acontecer de novo.
+const NO_TEXT_CONSTRAINT = [
+  'CRITICAL — ABSOLUTELY NO TEXT ANYWHERE IN THE IMAGE:',
+  'Do not render any text, letters, words, numbers, logos, watermarks, signatures, captions, or brand names anywhere in the scene — not on the wall, not on the frame, not on the floor, not on any object, not as an overlay.',
+  'The ONLY exception is text that is already part of the uploaded artwork itself (e.g. text printed inside the artwork) — reproduce that exactly as provided, but do NOT add any new text anywhere else.',
+].join(' ');
+
 // Usado quando a referência de entrada já É um mockup gerado (não a arte
 // crua) — pede pro modelo repintar só a moldura, preservando ângulo, corte,
 // luz e a renderização da arte. Evita que cada cor saia como uma foto
@@ -239,9 +249,11 @@ class PromptAgentService {
   private buildLifestylePrompt(frame: FrameType, room: RoomType, style: StyleType): string {
     return [
       `${STYLE_DESCRIPTIONS[style]} applied to ${ROOM_DESCRIPTIONS[room]}.`,
-      // Visual style — alinhado com fotos do goquadros.com.br: editorial real,
-      // não pode ter cara de AI/CG. Cores ricas, deep focus, luz direcional.
-      `Indistinguishable from a professional editorial interior shoot for a premium decor brand (reference: goquadros.com.br). MUST NOT look AI-generated, MUST NOT look 3D-rendered or CG. Photographic realism with crisp focus and natural film-like quality.`,
+      // Visual style — editorial real, não pode ter cara de AI/CG. Cores
+      // ricas, deep focus, luz direcional. Sem citar marca/domínio aqui —
+      // o modelo já chegou a desenhar "goquadros.com.br" como texto na
+      // parede quando o nome aparecia no prompt.
+      `Indistinguishable from a professional editorial interior shoot for a premium decor brand. MUST NOT look AI-generated, MUST NOT look 3D-rendered or CG. Photographic realism with crisp focus and natural film-like quality.`,
       `Lighting: warm golden directional sunlight entering through a window, casting crisp soft shadows on the floor and adjacent surfaces. Avoid flat ambient lighting and avoid window overexposure — keep the highlights controlled.`,
       `Color and depth: vivid saturated natural colors with rich contrast, deep tonal range (true blacks, clean whites), every plane crisp and in focus throughout the scene — deep focus, no shallow depth of field, no blurry background.`,
       `Composition: 35mm lens, frontal shot, camera positioned close to the wall. The framed artwork should fill roughly 55-70% of the image height and be the unmistakable visual anchor. DO NOT crop so tight that the room disappears — this must still read as a real lifestyle photo in a home, not an isolated product mockup: always keep a small recognizable hint of furniture and wall texture in frame (e.g. the arm of a sofa, the corner of a bed, the edge of a dining table). At the same time, furniture must stay a partial glimpse, not a full piece — never show an entire sofa, a full table with all its chairs, or the whole bed. No other wall art or gallery-wall arrangement visible — the featured piece is the only artwork on the wall.`,
@@ -250,6 +262,7 @@ class PromptAgentService {
       `Frame: thin, ${FRAME_DESCRIPTIONS[frame]}, intentionally chosen to harmonize with the room's palette and decor.`,
       FINISH_CONSTRAINTS,
       ARTWORK_FIDELITY,
+      NO_TEXT_CONSTRAINT,
       `Aspect ratio 3:4.`,
     ].join(' ');
   }
@@ -261,6 +274,7 @@ class PromptAgentService {
       FINISH_CONSTRAINTS,
       `Straight frontal view, perfectly centered. Soft uniform studio lighting from the front-left, very subtle shadow on the right side to give depth, no harsh shadows. Minimalist premium product photography.`,
       ARTWORK_FIDELITY,
+      NO_TEXT_CONSTRAINT,
       `Aspect ratio 3:4.`,
     ].join(' ');
   }
@@ -277,6 +291,7 @@ class PromptAgentService {
       MOCKUP_RECOLOR_FIDELITY,
       `THE ONLY CHANGE ALLOWED: repaint the wood frame molding to ${FRAME_DESCRIPTIONS[toFrame]}. Same thin molding shape, same proportions, same construction — only its color/material finish changes.`,
       FINISH_CONSTRAINTS,
+      NO_TEXT_CONSTRAINT,
       `Aspect ratio 3:4.`,
     ].join(' ');
   }
@@ -286,6 +301,7 @@ class PromptAgentService {
       `Use the uploaded image as the scene reference.`,
       ARTWORK_FIDELITY,
       FINISH_CONSTRAINTS,
+      NO_TEXT_CONSTRAINT,
       `The LARGE framed artwork is the focal point and must remain identical to the reference image throughout the entire video — same colors, composition and details in every frame. Do not alter the artwork at any point.`,
       `Opening scene: young Brazilian woman, dark hair, 25–35 years old, casual linen outfit in neutral ivory tones, natural makeup, hanging the framed artwork shown in the reference image on a wall, arms raised, satisfied expression, warm golden sunlight streaming through a side window, candid authentic lifestyle moment, real refined home feel, not a photoshoot.`,
       `Then camera slowly pulls back and pans to show the framed artwork directly from the front, large and centered on the wall as the visual anchor, artwork clearly visible and identical to the reference image, no person in frame, soft even lighting, clean editorial product shot.`,
