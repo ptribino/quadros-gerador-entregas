@@ -92,6 +92,8 @@ export default function CatalogPage() {
   const [categoryId, setCategoryId] = useState<string>("");
   const [folderId, setFolderId] = useState<string>("");
   const [subFolderId, setSubFolderId] = useState<string>(SUBFOLDER_ALL);
+  const [folderLinkInput, setFolderLinkInput] = useState<string>("");
+  const [folderLinkError, setFolderLinkError] = useState<string>("");
   const [count, setCount] = useState<number>(15);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("suggested");
   const [genFilter, setGenFilter] = useState<GenFilter>("all");
@@ -378,6 +380,21 @@ export default function CatalogPage() {
     setFolderId(id === SUBFOLDER_ALL ? categoryRootFolderId ?? "" : id);
   };
 
+  // Pra pastas que ainda não estão mapeadas a nenhuma categoria (ex: banco
+  // de imagens de terceiros) — mesma lógica do ImageSelector na geração manual.
+  const handleFolderLinkChange = (value: string) => {
+    setFolderLinkInput(value);
+    setFolderLinkError("");
+    if (!value.trim()) return;
+    const match = value.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (match) {
+      setFolderId(match[1]);
+      setSubFolderId(SUBFOLDER_ALL);
+    } else {
+      setFolderLinkError("Link inválido. Cole o link completo de uma pasta do Google Drive.");
+    }
+  };
+
   const toggleSelect = (id: number) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -483,6 +500,16 @@ export default function CatalogPage() {
               }}
               placeholder="ID da pasta no Drive"
             />
+            <Input
+              value={folderLinkInput}
+              onChange={(e) => handleFolderLinkChange(e.target.value)}
+              placeholder="Ou cole o link de uma pasta do Google Drive"
+              className={`text-xs ${folderLinkError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+              title="Pra pastas que ainda não estão mapeadas a nenhuma categoria — cola o link e o ID é extraído automaticamente"
+            />
+            {folderLinkError && (
+              <p className="text-xs text-destructive">{folderLinkError}</p>
+            )}
           </div>
           <div className="space-y-1">
             <Label>Quantidade</Label>
