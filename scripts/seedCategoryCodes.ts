@@ -43,6 +43,24 @@ const SEEDS = [
   // mudou de bebidas pra paleta cromática vermelho/branco — mapeamento Tray
   // vira Estilos/Contemporâneos por padrão; ajustar se Priscila preferir outro.
   { folderName: "#WR White and Red",       displayName: "White and Red",       code3: "WIN", trayCategoriaPrincipal: "Estilos", traySubcategoria: "Contemporâneos" },
+  // Categorias reais da Tray (export de categorias, 2026-07-05) sem pasta
+  // correspondente no banco de imagens do Drive — ficam "(sem pasta)" no
+  // dropdown de categoria da curadoria, então quem gerar sugestões com elas
+  // precisa colar o link da pasta manualmente (folderId não é auto-preenchido).
+  { folderName: "Sala",         displayName: "Sala",         code3: "SAL", trayCategoriaPrincipal: "Ambientes", traySubcategoria: "Sala" },
+  { folderName: "Quarto",       displayName: "Quarto",       code3: "QRT", trayCategoriaPrincipal: "Ambientes", traySubcategoria: "Quarto" },
+  { folderName: "Escritório",   displayName: "Escritório",   code3: "ESR", trayCategoriaPrincipal: "Ambientes", traySubcategoria: "Escritório" },
+  { folderName: "Cozinha",      displayName: "Cozinha",      code3: "COZ", trayCategoriaPrincipal: "Ambientes", traySubcategoria: "Cozinha" },
+  { folderName: "Lavabo",       displayName: "Lavabo",       code3: "LAV", trayCategoriaPrincipal: "Ambientes", traySubcategoria: "Lavabo" },
+  { folderName: "Área Gourmet", displayName: "Área Gourmet", code3: "GOU", trayCategoriaPrincipal: "Ambientes", traySubcategoria: "Área Gourmet" },
+  { folderName: "Line Art",     displayName: "Line Art",     code3: "LNA", trayCategoriaPrincipal: "Estilos",   traySubcategoria: "Line Art" },
+  { folderName: "Minimalistas", displayName: "Minimalistas", code3: "MIN", trayCategoriaPrincipal: "Estilos",   traySubcategoria: "Minimalistas" },
+  { folderName: "Japandi",      displayName: "Japandi",      code3: "JAP", trayCategoriaPrincipal: "Estilos",   traySubcategoria: "Japandi" },
+  { folderName: "Boho",         displayName: "Boho",         code3: "BOH", trayCategoriaPrincipal: "Estilos",   traySubcategoria: "Boho" },
+  { folderName: "Cidades",      displayName: "Cidades",      code3: "CID", trayCategoriaPrincipal: "Temas",     traySubcategoria: "Cidades" },
+  { folderName: "Religiosos",   displayName: "Religiosos",   code3: "REL", trayCategoriaPrincipal: "Temas",     traySubcategoria: "Religiosos" },
+  { folderName: "Jairo Rosas",  displayName: "Jairo Rosas",  code3: "JRO", trayCategoriaPrincipal: "Artistas",  traySubcategoria: "Jairo Rosas" },
+  { folderName: "Renan Santos", displayName: "Renan Santos", code3: "RSA", trayCategoriaPrincipal: "Artistas",  traySubcategoria: "Renan Santos" },
 ];
 
 async function run() {

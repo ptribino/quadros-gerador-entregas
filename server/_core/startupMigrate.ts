@@ -36,6 +36,24 @@ const SEEDS = [
   ["#VD Veículos Diversos",   "Veículos Diversos",   "VEI", "Temas",   "Veículos"],
   // WIN: pasta renomeada (Wine and Red → White and Red); conteúdo mudou pra paleta cromática.
   ["#WR White and Red",       "White and Red",       "WIN", "Estilos", "Contemporâneos"],
+  // Categorias reais da Tray (export de categorias, 2026-07-05) sem pasta
+  // correspondente no banco de imagens do Drive — ficam "(sem pasta)" no
+  // dropdown de categoria, então quem gerar sugestões com elas precisa
+  // colar o link da pasta manualmente (folderId não é auto-preenchido).
+  ["Sala",           "Sala",           "SAL", "Ambientes", "Sala"],
+  ["Quarto",         "Quarto",         "QRT", "Ambientes", "Quarto"],
+  ["Escritório",     "Escritório",     "ESR", "Ambientes", "Escritório"],
+  ["Cozinha",        "Cozinha",        "COZ", "Ambientes", "Cozinha"],
+  ["Lavabo",         "Lavabo",         "LAV", "Ambientes", "Lavabo"],
+  ["Área Gourmet",   "Área Gourmet",   "GOU", "Ambientes", "Área Gourmet"],
+  ["Line Art",       "Line Art",       "LNA", "Estilos",   "Line Art"],
+  ["Minimalistas",   "Minimalistas",   "MIN", "Estilos",   "Minimalistas"],
+  ["Japandi",        "Japandi",        "JAP", "Estilos",   "Japandi"],
+  ["Boho",           "Boho",           "BOH", "Estilos",   "Boho"],
+  ["Cidades",        "Cidades",        "CID", "Temas",     "Cidades"],
+  ["Religiosos",     "Religiosos",     "REL", "Temas",     "Religiosos"],
+  ["Jairo Rosas",    "Jairo Rosas",    "JRO", "Artistas",  "Jairo Rosas"],
+  ["Renan Santos",   "Renan Santos",   "RSA", "Artistas",  "Renan Santos"],
 ] as const;
 
 export async function runStartupMigrations() {
