@@ -386,7 +386,11 @@ export default function CatalogPage() {
     setFolderLinkInput(value);
     setFolderLinkError("");
     if (!value.trim()) return;
-    const match = value.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    // Não-guloso + lookahead: para a captura no primeiro "/", "?" ou início
+    // de outro link colado em seguida sem separador (ex: paste duplicado
+    // "https://.../folders/ID_REALhttps://.../folders/ID_REAL"), em vez de
+    // engolir o "https" da segunda URL junto com o ID.
+    const match = value.match(/\/folders\/([a-zA-Z0-9_-]+?)(?=https?:\/\/|[/?]|$)/);
     if (match) {
       setFolderId(match[1]);
       setSubFolderId(SUBFOLDER_ALL);

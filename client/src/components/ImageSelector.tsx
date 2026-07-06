@@ -25,7 +25,10 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const extractFolderIdFromLink = (link: string): string | null => {
-    const match = link.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    // Não-guloso + lookahead: para a captura no primeiro "/", "?" ou início
+    // de outro link colado em seguida sem separador (paste duplicado), em
+    // vez de engolir o "https" da segunda URL junto com o ID.
+    const match = link.match(/\/folders\/([a-zA-Z0-9_-]+?)(?=https?:\/\/|[/?]|$)/);
     return match ? match[1] : null;
   };
 
