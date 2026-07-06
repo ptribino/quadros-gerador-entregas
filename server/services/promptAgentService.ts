@@ -125,6 +125,7 @@ const ARTWORK_FIDELITY = [
 const MOCKUP_RECOLOR_FIDELITY = [
   'This is a professional product photograph of a single framed print hanging on a wall — treat it as an EXACT visual reference, not inspiration.',
   'CRITICAL — PIXEL-IDENTICAL REPRODUCTION: reproduce every pixel of this photo exactly as it is — same camera angle, same distance, same crop, same wall, same shadow, same lighting, and the exact same printed artwork inside the frame, unchanged in any way (same colors, same composition, same details).',
+  'CRITICAL — SAME FRAMING: the frame must occupy the EXACT same position, size and margins within the image as in the reference — same empty space on all four sides, same zoom level, same crop boundaries. Do NOT zoom in, zoom out, re-crop, recenter, or change how much of the wall is visible around the frame.',
   'Do NOT add, remove, resize, recrop, or move anything else in the photo.',
 ].join(' ');
 
@@ -249,7 +250,7 @@ class PromptAgentService {
       `Frame: thin, ${FRAME_DESCRIPTIONS[frame]}, intentionally chosen to harmonize with the room's palette and decor.`,
       FINISH_CONSTRAINTS,
       ARTWORK_FIDELITY,
-      `Aspect ratio 4:5.`,
+      `Aspect ratio 3:4.`,
     ].join(' ');
   }
 
@@ -260,7 +261,7 @@ class PromptAgentService {
       FINISH_CONSTRAINTS,
       `Straight frontal view, perfectly centered. Soft uniform studio lighting from the front-left, very subtle shadow on the right side to give depth, no harsh shadows. Minimalist premium product photography.`,
       ARTWORK_FIDELITY,
-      `Aspect ratio 4:5.`,
+      `Aspect ratio 3:4.`,
     ].join(' ');
   }
 
@@ -276,7 +277,7 @@ class PromptAgentService {
       MOCKUP_RECOLOR_FIDELITY,
       `THE ONLY CHANGE ALLOWED: repaint the wood frame molding to ${FRAME_DESCRIPTIONS[toFrame]}. Same thin molding shape, same proportions, same construction — only its color/material finish changes.`,
       FINISH_CONSTRAINTS,
-      `Aspect ratio 4:5.`,
+      `Aspect ratio 3:4.`,
     ].join(' ');
   }
 
@@ -301,7 +302,7 @@ class PromptAgentService {
    */
   buildLifestyleStill16x9(frame: FrameType, room: RoomType, style: StyleType): string {
     return this.buildLifestylePrompt(frame, room, style).replace(
-      'Aspect ratio 4:5.',
+      'Aspect ratio 3:4.',
       'Aspect ratio 16:9.',
     );
   }
