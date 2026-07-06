@@ -502,14 +502,27 @@ export const catalogRouter = router({
       const skipped = allRows
         .filter((r) => !r.p.imageUrl1)
         .map((r) => ({ id: r.p.id, sku: r.p.sku, nome: r.p.nome }));
+      // Produtos gerados antes da Etapa 4 (mockup por cor de moldura) não
+      // têm mockupUrlLightWood/DarkWood/White/Black — a variação por cor
+      // fica em branco na planilha do produto principal e a usuária
+      // precisa regenerar as imagens desses produtos.
+      const skusSemMockupPorMoldura = rows
+        .filter(
+          (r) =>
+            !r.p.mockupUrlLightWood ||
+            !r.p.mockupUrlDarkWood ||
+            !r.p.mockupUrlWhite ||
+            !r.p.mockupUrlBlack,
+        )
+        .map((r) => r.p.sku);
 
-      // Layout do template oficial de importação da Tray (30 colunas
-      // originais, validadas por importação manual bem-sucedida no painel)
-      // + 2 colunas extras (31-32) confirmadas no dicionário oficial de
-      // campos da Tray em 2026-07-04: "Mensagem adicional" e "Quando acabar
-      // o estoque" existem como campos reais de produto (não só de
-      // variação). A Tray casa colunas pelo texto do header — por isso os
-      // headers abaixo usam o nome EXATO de cada campo no dicionário oficial.
+      // Layout do template oficial de importação da Tray, confirmado em
+      // 2026-07-05 com o dicionário de campos do painel: o produto aceita
+      // 7 posições de imagem (colunas 5-11: principal + "2" até "7"), não
+      // só 4 como a versão anterior assumia. As colunas seguintes (preço,
+      // peso, etc.) foram todas deslocadas 3 posições pra abrir espaço.
+      // A Tray casa colunas pelo texto do header — por isso os headers
+      // abaixo usam o nome EXATO de cada campo no dicionário oficial.
       // Colunas 1 e 2 ("Código do produto (ID)" e "Código da categoria
       // principal (ID)") são numéricas — deixadas em branco para criar
       // produtos novos (Tray gera os IDs); preencher só ao atualizar.
@@ -517,38 +530,41 @@ export const catalogRouter = router({
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Worksheet");
       ws.columns = [
-        { header: "Código do produto (ID)", key: "id", width: 14 },                       // 1
-        { header: "Código da categoria principal (ID)", key: "catId", width: 18 },        // 2
-        { header: "Nome do produto", key: "nome", width: 60 },                            // 3
-        { header: "HTML da descrição completa", key: "html", width: 80 },                 // 4
-        { header: "Endereço da imagem principal do produto", key: "img1", width: 50 },    // 5
-        { header: "Endereço da imagem do produto 2", key: "img2", width: 50 },            // 6
-        { header: "Endereço da imagem do produto 3", key: "img3", width: 50 },            // 7
-        { header: "Endereço da imagem do produto 4", key: "img4", width: 50 },            // 8
-        { header: "Preço de venda em reais", key: "precoVenda", width: 16 },              // 9
-        { header: "Peso do produto (gramas)", key: "peso", width: 14 },                   // 10
-        { header: "Estoque do produto", key: "estoque", width: 12 },                      // 11
-        { header: "Estoque mínimo para aviso", key: "estoqueMin", width: 12 },            // 12
-        { header: "Exibir selo destaque na loja", key: "seloDestaque", width: 14 },       // 13
-        { header: "Exibir selo de lançamento", key: "seloLancamento", width: 14 },        // 14
-        { header: "Exibir selo adicional", key: "seloAdicional", width: 14 },             // 15
-        { header: "Marca", key: "marca", width: 16 },                                     // 16
-        { header: "Modelo", key: "modelo", width: 30 },                                   // 17
-        { header: "Referência (código fornecedor)", key: "sku", width: 60 },              // 18
-        { header: "Tempo de garantia", key: "garantia", width: 14 },                      // 19
-        { header: "Preço de custo em reais", key: "precoCusto", width: 16 },              // 20
-        { header: "Comprimento (cm)", key: "comprimento", width: 14 },                    // 21
-        { header: "Largura (cm)", key: "largura", width: 10 },                            // 22
-        { header: "Altura (cm)", key: "altura", width: 10 },                              // 23
-        { header: "SEO - Titulo do produto", key: "seoTitulo", width: 40 },               // 24
-        { header: "SEO - Descrição simplificada", key: "seoDesc", width: 50 },            // 25
-        { header: "SEO - Palavras chaves do produto", key: "seoKeywords", width: 40 },    // 26
-        { header: "SEO - Endereço do produto (URL)", key: "slug", width: 50 },            // 27
-        { header: "Nome da categoria - nível 1", key: "catN1", width: 22 },               // 28
-        { header: "Nome da categoria - nível 2", key: "catN2", width: 22 },               // 29
-        { header: "Exibir na loja", key: "naLoja", width: 12 },                           // 30
-        { header: "Mensagem adicional", key: "mensagemAdicional", width: 50 },            // 31
-        { header: "Quando acabar o estoque", key: "quandoAcabarEstoque", width: 22 },     // 32
+        { header: "Código do produto (ID)", key: "id", width: 14 },
+        { header: "Código da categoria principal (ID)", key: "catId", width: 18 },
+        { header: "Nome do produto", key: "nome", width: 60 },
+        { header: "HTML da descrição completa", key: "html", width: 80 },
+        { header: "Endereço da imagem principal do produto", key: "img1", width: 50 },
+        { header: "Endereço da imagem do produto 2", key: "img2", width: 50 },
+        { header: "Endereço da imagem do produto 3", key: "img3", width: 50 },
+        { header: "Endereço da imagem do produto 4", key: "img4", width: 50 },
+        { header: "Endereço da imagem do produto 5", key: "img5", width: 50 },
+        { header: "Endereço da imagem do produto 6", key: "img6", width: 50 },
+        { header: "Endereço da imagem do produto 7", key: "img7", width: 50 },
+        { header: "Preço de venda em reais", key: "precoVenda", width: 16 },
+        { header: "Peso do produto (gramas)", key: "peso", width: 14 },
+        { header: "Estoque do produto", key: "estoque", width: 12 },
+        { header: "Estoque mínimo para aviso", key: "estoqueMin", width: 12 },
+        { header: "Exibir selo destaque na loja", key: "seloDestaque", width: 14 },
+        { header: "Exibir selo de lançamento", key: "seloLancamento", width: 14 },
+        { header: "Exibir selo adicional", key: "seloAdicional", width: 14 },
+        { header: "Marca", key: "marca", width: 16 },
+        { header: "Modelo", key: "modelo", width: 30 },
+        { header: "Referência (código fornecedor)", key: "sku", width: 60 },
+        { header: "Tempo de garantia", key: "garantia", width: 14 },
+        { header: "Preço de custo em reais", key: "precoCusto", width: 16 },
+        { header: "Comprimento (cm)", key: "comprimento", width: 14 },
+        { header: "Largura (cm)", key: "largura", width: 10 },
+        { header: "Altura (cm)", key: "altura", width: 10 },
+        { header: "SEO - Titulo do produto", key: "seoTitulo", width: 40 },
+        { header: "SEO - Descrição simplificada", key: "seoDesc", width: 50 },
+        { header: "SEO - Palavras chaves do produto", key: "seoKeywords", width: 40 },
+        { header: "SEO - Endereço do produto (URL)", key: "slug", width: 50 },
+        { header: "Nome da categoria - nível 1", key: "catN1", width: 22 },
+        { header: "Nome da categoria - nível 2", key: "catN2", width: 22 },
+        { header: "Exibir na loja", key: "naLoja", width: 12 },
+        { header: "Mensagem adicional", key: "mensagemAdicional", width: 50 },
+        { header: "Quando acabar o estoque", key: "quandoAcabarEstoque", width: 22 },
       ];
       ws.getRow(1).font = { bold: true };
 
@@ -565,17 +581,16 @@ export const catalogRouter = router({
           catId: null,
           nome: p.nome,
           html: p.descricaoHtml ?? "",
-          // Ordem pedida pela Priscila (2026-07-04): a arte original web-fit
-          // (antes a 1ª imagem) vira a ÚLTIMA; lifestyle 1/2 e mockup sobem
-          // uma posição cada.
-          //   1 = lifestyle 1        (era imageUrl2)
-          //   2 = lifestyle 2        (era imageUrl3)
-          //   3 = mockup             (era imageUrl4)
-          //   4 = arte original web-fit, sem moldura/ambiente (era imageUrl1)
-          img1: toTrayImageUrl(p.imageUrl2),
-          img2: toTrayImageUrl(p.imageUrl3),
-          img3: toTrayImageUrl(p.imageUrl4),
-          img4: toTrayImageUrl(p.imageUrl1),
+          // Ordem confirmada com a Priscila em 2026-07-05: as 2 lifestyles,
+          // depois as 4 cores de moldura do mockup, e a arte original
+          // web-fit (sem moldura/ambiente) por último.
+          img1: toTrayImageUrl(p.imageUrl2), // lifestyle 1
+          img2: toTrayImageUrl(p.imageUrl3), // lifestyle 2
+          img3: toTrayImageUrl(p.mockupUrlLightWood), // mockup Amadeirado claro
+          img4: toTrayImageUrl(p.mockupUrlDarkWood), // mockup Amadeirado escuro
+          img5: toTrayImageUrl(p.mockupUrlWhite), // mockup Branca
+          img6: toTrayImageUrl(p.mockupUrlBlack), // mockup Preta
+          img7: toTrayImageUrl(p.imageUrl1), // arte original web-fit
           precoVenda: TRAY_EXPORT_DEFAULTS.precoVenda,
           peso: TRAY_EXPORT_DEFAULTS.pesoGramas,
           estoque: p.estoque,
@@ -612,6 +627,7 @@ export const catalogRouter = router({
         base64,
         rows: rows.length,
         skipped,
+        skusSemMockupPorMoldura,
       };
     }),
 

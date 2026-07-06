@@ -236,6 +236,15 @@ export default function CatalogPage() {
           { duration: 8000 },
         );
       }
+      const semMockup = res.skusSemMockupPorMoldura ?? [];
+      if (semMockup.length > 0) {
+        const preview = semMockup.slice(0, 3).join(", ");
+        const suffix = semMockup.length > 3 ? `, +${semMockup.length - 3}` : "";
+        toast.warning(
+          `${semMockup.length} produto(s) sem mockup por moldura (gerados antes dessa mudança) — faltam fotos 3-6 da galeria: ${preview}${suffix}`,
+          { duration: 8000 },
+        );
+      }
     },
     onError: (err) => toast.error(err.message),
   });
