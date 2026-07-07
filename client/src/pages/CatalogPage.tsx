@@ -14,8 +14,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
+
+/** Miniatura autenticada de um arquivo do banco do Drive (ver server/_core/driveThumbProxy.ts). */
+function DriveThumb({ fileId, name }: { fileId: string; name: string }) {
+  return (
+    <img
+      src={`/api/drive-thumb/${fileId}`}
+      alt={name}
+      title={name}
+      loading="lazy"
+      className="h-full w-full object-cover"
+    />
+  );
+}
 
 type StatusFilter =
   | "all"
@@ -27,6 +41,13 @@ type StatusFilter =
   | "rejected"
   | "error";
 type GenFilter = "all" | "generated" | "in_progress" | "queued" | "failed" | "none";
+type OrientationMode = "ambos" | "somente_retrato" | "somente_paisagem";
+
+const ORIENTATION_MODE_OPTIONS: ReadonlyArray<{ value: OrientationMode; label: string }> = [
+  { value: "ambos", label: "Ambos (padrão)" },
+  { value: "somente_retrato", label: "Somente retrato" },
+  { value: "somente_paisagem", label: "Somente paisagem" },
+];
 type SortKey = "sku" | "nome" | "potencial" | "status" | "geracao";
 type SortDir = "asc" | "desc";
 type StyleOverride =
@@ -95,6 +116,8 @@ export default function CatalogPage() {
   const [folderLinkInput, setFolderLinkInput] = useState<string>("");
   const [folderLinkError, setFolderLinkError] = useState<string>("");
   const [count, setCount] = useState<number>(15);
+  const [allItems, setAllItems] = useState<boolean>(false);
+  const [previewOpen, setPreviewOpen] = useState<boolean>(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("suggested");
   const [genFilter, setGenFilter] = useState<GenFilter>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -120,6 +143,10 @@ export default function CatalogPage() {
   const subFoldersQuery = trpc.catalog.listBankFolders.useQuery(
     { parentFolderId: categoryRootFolderId },
     { enabled: Boolean(user) && Boolean(categoryRootFolderId) },
+  );
+  const folderPreviewQuery = trpc.catalog.listFolderImages.useQuery(
+    { folderId },
+    { enabled: Boolean(user) && previewOpen && Boolean(folderId) },
   );
   // Sem filtro de status no servidor: busca todos os status da categoria
   // selecionada de uma vez, pra dar pra mostrar a contagem por status E
@@ -169,7 +196,7 @@ export default function CatalogPage() {
   });
 
   const trayVariationsInputRef = useRef<HTMLInputElement>(null);
-  const [onlyLandscapeVariations, setOnlyLandscapeVariations] = useState<boolean>(false);
+  const [orientationMode, setOrientationMode] = useState<OrientationMode>("ambos");
   const exportTrayVariationsMutation =
     trpc.catalog.exportTrayVariations.useMutation({
       onSuccess: (res) => {
@@ -204,7 +231,7 @@ export default function CatalogPage() {
       const dataUrl = e.target?.result as string;
       exportTrayVariationsMutation.mutate({
         fileBase64: dataUrl,
-        onlyLandscape: onlyLandscapeVariations,
+        orientationMode,
       });
     };
     reader.onerror = () => toast.error("Erro ao ler o arquivo");
@@ -519,6 +546,16 @@ export default function CatalogPage() {
             {folderLinkError && (
               <p className="text-xs text-destructive">{folderLinkError}</p>
             )}
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs"
+              disabled={!folderId}
+              onClick={() => setPreviewOpen(true)}
+            >
+              Ver imagens desta pasta
+            </Button>
           </div>
           <div className="space-y-1">
             <Label>Quantidade</Label>
@@ -527,8 +564,17 @@ export default function CatalogPage() {
               min={1}
               max={50}
               value={count}
+              disabled={allItems}
               onChange={(e) => setCount(Math.max(1, Math.min(50, Number(e.target.value) || 15)))}
             />
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Checkbox
+                checked={allItems}
+                onCheckedChange={(v) => setAllItems(v === true)}
+                className="border-2 border-foreground/40 data-[state=checked]:border-primary"
+              />
+              Todos os itens da pasta
+            </label>
           </div>
           <div className="flex items-end">
             <Button
@@ -538,6 +584,7 @@ export default function CatalogPage() {
                   folderId,
                   categoryCodeId: Number(categoryId),
                   count,
+                  all: allItems,
                 })
               }
             >
@@ -546,6 +593,49 @@ export default function CatalogPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Imagens da pasta</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            {folderPreviewQuery.isLoading && (
+              <p className="py-8 text-center text-sm text-muted-foreground">Carregando imagens...</p>
+            )}
+            {folderPreviewQuery.isError && (
+              <p className="py-8 text-center text-sm text-destructive">
+                Erro ao carregar imagens da pasta.
+              </p>
+            )}
+            {folderPreviewQuery.data && folderPreviewQuery.data.length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Nenhuma imagem encontrada nesta pasta (nem nas subpastas).
+              </p>
+            )}
+            {folderPreviewQuery.data && folderPreviewQuery.data.length > 0 && (
+              <>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Mostrando {folderPreviewQuery.data.length} imagem(ns)
+                  {folderPreviewQuery.data.length >= 60 && " (limite da pré-visualização — pode haver mais)"}.
+                </p>
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
+                  {folderPreviewQuery.data.map((f) => (
+                    <div key={f.id} className="space-y-1">
+                      <div className="aspect-square overflow-hidden rounded-md border bg-muted">
+                        <DriveThumb fileId={f.id} name={f.name} />
+                      </div>
+                      <p className="truncate text-[10px] text-muted-foreground" title={f.name}>
+                        {f.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader className="space-y-3 pb-3">
@@ -701,23 +791,39 @@ export default function CatalogPage() {
               disabled={exportTrayVariationsMutation.isPending}
               onClick={() => trayVariationsInputRef.current?.click()}
               title={
-                onlyLandscapeVariations
-                  ? "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 8 variações por produto: 1 por tamanho, todas em Paisagem (Retrato desmarcado)."
-                  : "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 10 variações por produto: Tamanho × Orientação (60x40 e 70x50 em Retrato e Paisagem, os demais tamanhos só em Paisagem)."
+                orientationMode === "somente_paisagem"
+                  ? "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 8 variações por produto: 1 por tamanho, todas em Paisagem."
+                  : orientationMode === "somente_retrato"
+                    ? "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 8 variações por produto: 1 por tamanho, todas em Retrato."
+                    : "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 10 variações por produto: Tamanho × Orientação (60x40 e 70x50 em Retrato e Paisagem, os demais tamanhos só em Paisagem)."
               }
             >
               {exportTrayVariationsMutation.isPending ? "..." : "Gerar variações"}
             </Button>
-            <label
-              className="flex items-center gap-1.5 text-xs text-muted-foreground"
-              title="Marque quando a arte não pode ser reenquadrada em retrato — remove a orientação Retrato de todos os tamanhos, inclusive 60x40 e 70x50."
-            >
-              <Checkbox
-                checked={onlyLandscapeVariations}
-                onCheckedChange={(checked) => setOnlyLandscapeVariations(checked === true)}
-              />
-              Sem retrato (só paisagem)
-            </label>
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="orientation-mode" className="text-xs text-muted-foreground">
+                Orientação
+              </Label>
+              <Select
+                value={orientationMode}
+                onValueChange={(v) => setOrientationMode(v as OrientationMode)}
+              >
+                <SelectTrigger
+                  id="orientation-mode"
+                  className="h-8 w-44 text-xs"
+                  title="Ambos: 60x40 e 70x50 saem em Retrato e Paisagem, os demais tamanhos só em Paisagem. Somente retrato/paisagem: todos os 8 tamanhos só naquela orientação — use quando a arte não pode ser reenquadrada na outra."
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ORIENTATION_MODE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Button
               size="sm"
               variant="outline"
@@ -741,7 +847,7 @@ export default function CatalogPage() {
             (2) clique <strong>Aprovar</strong>,{" "}
             (3) com os mesmos produtos ainda marcados, clique <strong>Gerar imagens</strong> — o sistema gera 3 imagens por produto (~1.5 min cada) e salva na sua pasta do Drive.{" "}
             (4) Quando a coluna GERAÇÃO mostrar <strong className="text-emerald-600">✅ pronto</strong>, clique <strong>Exportar Tray</strong> e importe na sua loja.{" "}
-            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com as variações por produto (Tamanho × Orientação) pronto pra importar; marque <strong>Sem retrato</strong> se a arte não puder ser reenquadrada em retrato.{" "}
+            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com as variações por produto (Tamanho × Orientação) pronto pra importar; ajuste <strong>Orientação</strong> pra "Somente retrato"/"Somente paisagem" se a arte não puder ser reenquadrada na outra orientação.{" "}
             Quando as variações já estiverem na loja, clique <strong>Marcar como cadastrado</strong>.
           </div>
 
@@ -869,6 +975,7 @@ export default function CatalogPage() {
             <thead className="border-b bg-muted/50 text-xs uppercase text-muted-foreground">
               <tr>
                 <th className="w-10 px-3 py-2"></th>
+                <th className="w-14 px-3 py-2"></th>
                 <SortableTh label="SKU" sortKey="sku" current={sortKey} dir={sortDir} onClick={toggleSort} />
                 <SortableTh label="Nome" sortKey="nome" current={sortKey} dir={sortDir} onClick={toggleSort} />
                 <SortableTh label="Potencial" sortKey="potencial" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
@@ -886,6 +993,15 @@ export default function CatalogPage() {
                       onCheckedChange={() => toggleSelect(p.id)}
                       className="size-5 border-2 border-foreground/40 data-[state=checked]:border-primary"
                     />
+                  </td>
+                  <td className="px-3 py-2">
+                    {p.sourceDriveFileId ? (
+                      <div className="h-10 w-10 overflow-hidden rounded border bg-muted">
+                        <DriveThumb fileId={p.sourceDriveFileId} name={p.nome} />
+                      </div>
+                    ) : (
+                      <div className="h-10 w-10 rounded border bg-muted" />
+                    )}
                   </td>
                   <td className="px-3 py-2 font-mono text-xs">{p.sku}</td>
                   <td className="px-3 py-2">{p.nome}</td>
@@ -927,7 +1043,7 @@ export default function CatalogPage() {
               ))}
               {productsQuery.data && visibleProducts.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                     Nenhuma sugestão neste filtro. Gere sugestões acima.
                   </td>
                 </tr>

@@ -73,6 +73,7 @@ Regras inegociáveis:
 - A descrição é HTML puro (sem \\\`\\\`\\\`html, sem markdown), no template abaixo, preenchendo APENAS os trechos entre {{}}.
 - O "potencialVenda" deve refletir honestamente quão comercial a arte é: 10 = best-seller óbvio, 1 = arte interessante mas nichada demais.
 - Não invente dimensões, materiais, preços ou prazos — esses campos são preenchidos por outro sistema.
+- Se receber uma lista de "nomes já usados", o "nome" gerado NÃO pode ser igual (nem uma variação trivial) a nenhum item dessa lista — crie um nome diferente para a mesma categoria.
 
 TEMPLATE DE DESCRIÇÃO (preencha apenas o que está entre {{}}):
 <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
@@ -113,6 +114,7 @@ export async function analyzeImageForCatalog(args: {
   imageDataUrl: string;
   categoria: string;
   fileName: string;
+  existingNames?: string[];
 }): Promise<AiSuggestion> {
   if (!ENV.googleApiKey) {
     throw new Error("GOOGLE_API_KEY não configurada");
@@ -122,7 +124,11 @@ export async function analyzeImageForCatalog(args: {
   const model = "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${ENV.googleApiKey}`;
 
-  const userText = `Categoria do banco: "${args.categoria}". Arquivo de origem: "${args.fileName}". Analise a imagem e gere os metadados conforme as instruções.`;
+  const excludedNamesText =
+    args.existingNames && args.existingNames.length > 0
+      ? `\n\nNomes já usados nesta categoria — NÃO repita nenhum deles, crie um nome diferente: ${args.existingNames.join("; ")}`
+      : "";
+  const userText = `Categoria do banco: "${args.categoria}". Arquivo de origem: "${args.fileName}". Analise a imagem e gere os metadados conforme as instruções.${excludedNamesText}`;
 
   const payload = {
     systemInstruction: { parts: [{ text: PROMPT_SISTEMA }] },

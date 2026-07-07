@@ -174,6 +174,28 @@ export const catalogRouter = router({
     }),
 
   /**
+   * Pré-visualização: lista as imagens de uma pasta (recursivo, mesma lógica
+   * de suggestProducts) só com id/nome — sem baixar conteúdo — pra UI montar
+   * uma grade de miniaturas antes de rodar a IA. As miniaturas em si são
+   * servidas por /api/drive-thumb/:fileId (ver server/_core/driveThumbProxy.ts).
+   */
+  listFolderImages: protectedProcedure
+    .input(
+      z.object({
+        folderId: z.string().min(1),
+        maxFiles: z.number().int().min(1).max(300).default(60),
+      }),
+    )
+    .query(async ({ input, ctx }) => {
+      const accessToken = await requireAccessToken(ctx.user.openId);
+      const files = await googleDriveService.listImagesRecursive(accessToken, input.folderId, {
+        maxDepth: 3,
+        maxFiles: input.maxFiles,
+      });
+      return files.map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType }));
+    }),
+
+  /**
    * Passo 1: lê N imagens da pasta de uma categoria, manda cada uma pro
    * Gemini Vision e persiste sugestões em `products` com status="suggested".
    *
@@ -185,6 +207,10 @@ export const catalogRouter = router({
         folderId: z.string().min(1),
         categoryCodeId: z.number().int().positive(),
         count: z.number().int().min(1).max(50).default(15),
+        // Quando true, ignora `count` e processa todos os itens da pasta
+        // (até ALL_ITEMS_CAP) — pedido explícito do usuário pra casos em
+        // que ele quer o banco inteiro, não só uma amostra.
+        all: z.boolean().optional().default(false),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -200,23 +226,30 @@ export const catalogRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Categoria não encontrada" });
       }
 
+      // Teto de segurança pra "todos os itens" não travar o pipeline numa
+      // pasta com milhares de arquivos (cada imagem = 1 chamada Gemini).
+      const ALL_ITEMS_CAP = 300;
+
       // Recursivo: a pasta-mãe da categoria pode não ter imagens diretas,
       // só sub-subpastas (ex: "#PN Paisagens Naturais" → #PN01 Cachoeiras → imagens).
       const files = await googleDriveService.listImagesRecursive(accessToken, input.folderId, {
         maxDepth: 3,
-        maxFiles: Math.max(input.count * 5, 50),
+        maxFiles: input.all ? ALL_ITEMS_CAP : Math.max(input.count * 5, 50),
       });
-      const slice = files.slice(0, input.count);
+      const slice = input.all ? files : files.slice(0, input.count);
       if (slice.length === 0) {
         return { processed: 0, succeeded: 0, failed: 0, skipped: 0, errors: [] };
       }
 
-      // Calcula próximo seq (continua a sequência global por categoria)
+      // Calcula próximo seq (continua a sequência global por categoria) e
+      // monta o set de nomes já usados nessa categoria pra evitar sugestões
+      // duplicadas (o Gemini recebe essa lista e evita repetir).
       const existing = await db
-        .select({ sku: products.sku })
+        .select({ sku: products.sku, nome: products.nome })
         .from(products)
         .where(eq(products.categoryCodeId, category.id));
       let nextSeq = existing.length + 1;
+      const usedNames = new Set(existing.map((e) => e.nome.trim().toLowerCase()));
 
       const errors: { fileName: string; reason: string }[] = [];
       let succeeded = 0;
@@ -241,17 +274,39 @@ export const catalogRouter = router({
             file.mimeType,
           );
 
-          const ai = await analyzeImageForCatalog({
+          let ai = await analyzeImageForCatalog({
             imageDataUrl: dataUrl,
             categoria: category.displayName,
             fileName: file.name,
+            existingNames: Array.from(usedNames),
           });
+
+          // Se o nome colidiu mesmo recebendo a lista de exclusão, dá mais
+          // uma chance ao Gemini apontando explicitamente a colisão.
+          if (usedNames.has(ai.nome.trim().toLowerCase())) {
+            ai = await analyzeImageForCatalog({
+              imageDataUrl: dataUrl,
+              categoria: category.displayName,
+              fileName: file.name,
+              existingNames: Array.from(usedNames).concat(ai.nome.trim().toLowerCase()),
+            });
+          }
+
+          // Rede de segurança: garante unicidade mesmo se a IA colidir de
+          // novo, pra não travar o pipeline numa pasta grande.
+          let nome = ai.nome;
+          if (usedNames.has(nome.trim().toLowerCase())) {
+            let n = 2;
+            while (usedNames.has(`${nome} ${n}`.trim().toLowerCase())) n += 1;
+            nome = `${nome} ${n}`;
+          }
+          usedNames.add(nome.trim().toLowerCase());
 
           const sku = buildSku({
             cat3: category.code3,
             seq: nextSeq,
             variant: 1,
-            nome: ai.nome,
+            nome,
           });
           nextSeq += 1;
 
@@ -259,9 +314,9 @@ export const catalogRouter = router({
             userId: ctx.user.id,
             categoryCodeId: category.id,
             sku,
-            nome: ai.nome,
+            nome,
             descricaoHtml: ai.descricaoHtml,
-            slugSeo: buildSlug(ai.nome),
+            slugSeo: buildSlug(nome),
             sourceDriveFileId: file.id,
             sourceDriveFileUrl: file.webViewLink,
             aiPotencialVenda: ai.potencialVenda,
@@ -650,11 +705,15 @@ export const catalogRouter = router({
     .input(
       z.object({
         fileBase64: z.string().min(1),
-        // Quando true, remove a orientação Retrato da matriz — usado quando
-        // a arte não permite reenquadramento em retrato (ex: obras muito
-        // horizontais) e a usuária não quer nenhuma variação retrato, nem
-        // nos 2 tamanhos que normalmente teriam as duas orientações.
-        onlyLandscape: z.boolean().optional().default(false),
+        // "ambos" (padrão) = matriz normal: 60x40 e 70x50 em Retrato + Paisagem,
+        // os 6 tamanhos maiores só em Paisagem.
+        // "somente_retrato" / "somente_paisagem" = a arte só existe numa
+        // orientação (ex: obra muito vertical ou muito horizontal) — gera
+        // TODOS os 8 tamanhos só naquela orientação.
+        orientationMode: z
+          .enum(["ambos", "somente_retrato", "somente_paisagem"])
+          .optional()
+          .default("ambos"),
       }),
     )
     .mutation(async ({ input }) => {
@@ -702,12 +761,14 @@ export const catalogRouter = router({
         { tamanho: tamanho("150cm x 100cm"), orientacao: "Paisagem" },
         { tamanho: tamanho("160cm x 110cm"), orientacao: "Paisagem" },
       ];
-      // Com onlyLandscape marcado, tira as linhas Retrato mesmo dos 2
-      // tamanhos que normalmente as têm — sobram os 8 tamanhos, todos em
-      // Paisagem, pra arte que não pode ser reenquadrada em retrato.
-      const VARIACOES = input.onlyLandscape
-        ? VARIACOES_BASE.filter((v) => v.orientacao !== "Retrato")
-        : VARIACOES_BASE;
+      // "somente_retrato"/"somente_paisagem": todos os 8 tamanhos só naquela
+      // orientação (nem os 2 tamanhos menores ganham a outra orientação).
+      const VARIACOES =
+        input.orientationMode === "somente_paisagem"
+          ? TAMANHOS.map((t) => ({ tamanho: t, orientacao: "Paisagem" as const }))
+          : input.orientationMode === "somente_retrato"
+            ? TAMANHOS.map((t) => ({ tamanho: t, orientacao: "Retrato" as const }))
+            : VARIACOES_BASE;
       const ESTOQUE_POR_VARIACAO = 99;
 
       // Aceita data URL (data:...;base64,XXX) ou base64 puro.
