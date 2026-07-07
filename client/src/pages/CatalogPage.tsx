@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,8 @@ const STATUS_LABELS: Record<Exclude<StatusFilter, "all">, string> = {
   rejected: "Rejeitados",
   error: "Com erro",
 };
+
+const PAGE_SIZE = 25;
 
 const GEN_RANK: Record<GenFilter, number> = {
   // usado pra ordenar a coluna "Geração" (mais avançado → mais "pronto")
@@ -373,6 +375,22 @@ export default function CatalogPage() {
       }
     });
   }, [productsQuery.data, statusFilter, genFilter, searchTerm, generatedFrom, generatedTo, sortKey, sortDir]);
+
+  // Paginação: mostra 25 produtos por vez em vez da lista inteira.
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(visibleProducts.length / PAGE_SIZE));
+  const pagedProducts = useMemo(
+    () => visibleProducts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [visibleProducts, page],
+  );
+  // Muda o filtro/busca/categoria -> volta pra página 1. Se a lista encolher
+  // (ex: menos produtos que a página atual), reenquadra pro último válido.
+  useEffect(() => {
+    setPage(1);
+  }, [categoryId, statusFilter, genFilter, searchTerm, generatedFrom, generatedTo]);
+  useEffect(() => {
+    setPage((p) => Math.min(p, totalPages));
+  }, [totalPages]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -985,7 +1003,7 @@ export default function CatalogPage() {
               </tr>
             </thead>
             <tbody>
-              {visibleProducts.map((p) => (
+              {pagedProducts.map((p) => (
                 <tr key={p.id} className="border-b hover:bg-muted/20">
                   <td className="px-3 py-2">
                     <Checkbox
@@ -1050,6 +1068,35 @@ export default function CatalogPage() {
               )}
             </tbody>
           </table>
+          {visibleProducts.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground">
+              <span>
+                Mostrando {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, visibleProducts.length)} de{" "}
+                {visibleProducts.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  ← Anterior
+                </Button>
+                <span>
+                  Página {page} de {totalPages}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Próxima →
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
