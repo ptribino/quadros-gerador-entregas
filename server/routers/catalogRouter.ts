@@ -647,7 +647,16 @@ export const catalogRouter = router({
    *     estoque, Altura, Comprimento, Largura, Peso.
    */
   exportTrayVariations: protectedProcedure
-    .input(z.object({ fileBase64: z.string().min(1) }))
+    .input(
+      z.object({
+        fileBase64: z.string().min(1),
+        // Quando true, remove a orientação Retrato da matriz — usado quando
+        // a arte não permite reenquadramento em retrato (ex: obras muito
+        // horizontais) e a usuária não quer nenhuma variação retrato, nem
+        // nos 2 tamanhos que normalmente teriam as duas orientações.
+        onlyLandscape: z.boolean().optional().default(false),
+      }),
+    )
     .mutation(async ({ input }) => {
       type SizeRow = {
         nome: string;
@@ -681,7 +690,7 @@ export const catalogRouter = router({
       // Paisagem — os 6 tamanhos maiores só em Paisagem. Preço/peso vêm de
       // TAMANHOS, a orientação não altera esses valores.
       const ORIENTACAO_TIPO_VARIACAO = "Orientação";
-      const VARIACOES: { tamanho: SizeRow; orientacao: "Retrato" | "Paisagem" }[] = [
+      const VARIACOES_BASE: { tamanho: SizeRow; orientacao: "Retrato" | "Paisagem" }[] = [
         { tamanho: tamanho("60cm x 40cm"), orientacao: "Retrato" },
         { tamanho: tamanho("60cm x 40cm"), orientacao: "Paisagem" },
         { tamanho: tamanho("70cm x 50cm"), orientacao: "Retrato" },
@@ -693,6 +702,12 @@ export const catalogRouter = router({
         { tamanho: tamanho("150cm x 100cm"), orientacao: "Paisagem" },
         { tamanho: tamanho("160cm x 110cm"), orientacao: "Paisagem" },
       ];
+      // Com onlyLandscape marcado, tira as linhas Retrato mesmo dos 2
+      // tamanhos que normalmente as têm — sobram os 8 tamanhos, todos em
+      // Paisagem, pra arte que não pode ser reenquadrada em retrato.
+      const VARIACOES = input.onlyLandscape
+        ? VARIACOES_BASE.filter((v) => v.orientacao !== "Retrato")
+        : VARIACOES_BASE;
       const ESTOQUE_POR_VARIACAO = 99;
 
       // Aceita data URL (data:...;base64,XXX) ou base64 puro.

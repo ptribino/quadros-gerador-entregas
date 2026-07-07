@@ -98,6 +98,8 @@ export default function CatalogPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("suggested");
   const [genFilter, setGenFilter] = useState<GenFilter>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [generatedFrom, setGeneratedFrom] = useState<string>("");
+  const [generatedTo, setGeneratedTo] = useState<string>("");
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -167,6 +169,7 @@ export default function CatalogPage() {
   });
 
   const trayVariationsInputRef = useRef<HTMLInputElement>(null);
+  const [onlyLandscapeVariations, setOnlyLandscapeVariations] = useState<boolean>(false);
   const exportTrayVariationsMutation =
     trpc.catalog.exportTrayVariations.useMutation({
       onSuccess: (res) => {
@@ -176,8 +179,9 @@ export default function CatalogPage() {
           base64: res.base64,
           rows: res.rows,
         });
+        const perProduto = res.products > 0 ? Math.round(res.rows / res.products) : 0;
         toast.success(
-          `${res.products} produto(s) → ${res.rows} variações geradas (10 por produto).`,
+          `${res.products} produto(s) → ${res.rows} variações geradas (${perProduto} por produto).`,
           { duration: 6000 },
         );
         if (res.skipped.length > 0) {
@@ -198,7 +202,10 @@ export default function CatalogPage() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
-      exportTrayVariationsMutation.mutate({ fileBase64: dataUrl });
+      exportTrayVariationsMutation.mutate({
+        fileBase64: dataUrl,
+        onlyLandscape: onlyLandscapeVariations,
+      });
     };
     reader.onerror = () => toast.error("Erro ao ler o arquivo");
     reader.readAsDataURL(file);
@@ -308,9 +315,18 @@ export default function CatalogPage() {
           return haystack.includes(term);
         })
       : byStatus;
-    const filtered = genFilter === "all"
+    const byGenFilter = genFilter === "all"
       ? bySearch
       : bySearch.filter((p) => classifyGen(p) === genFilter);
+    const filtered = !generatedFrom && !generatedTo
+      ? byGenFilter
+      : byGenFilter.filter((p) => {
+          const key = generatedDateKey(p.generatedAt ?? p.genCompletedAt);
+          if (!key) return false;
+          if (generatedFrom && key < generatedFrom) return false;
+          if (generatedTo && key > generatedTo) return false;
+          return true;
+        });
     if (!sortKey) return filtered;
     const dir = sortDir === "asc" ? 1 : -1;
     const cmp = (a: number | string, b: number | string) =>
@@ -329,7 +345,7 @@ export default function CatalogPage() {
           return cmp(GEN_RANK[classifyGen(a)], GEN_RANK[classifyGen(b)]);
       }
     });
-  }, [productsQuery.data, statusFilter, genFilter, searchTerm, sortKey, sortDir]);
+  }, [productsQuery.data, statusFilter, genFilter, searchTerm, generatedFrom, generatedTo, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -684,10 +700,24 @@ export default function CatalogPage() {
               variant="outline"
               disabled={exportTrayVariationsMutation.isPending}
               onClick={() => trayVariationsInputRef.current?.click()}
-              title="Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 10 variações por produto: Tamanho × Orientação (60x40 e 70x50 em Retrato e Paisagem, os demais tamanhos só em Paisagem)."
+              title={
+                onlyLandscapeVariations
+                  ? "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 8 variações por produto: 1 por tamanho, todas em Paisagem (Retrato desmarcado)."
+                  : "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 10 variações por produto: Tamanho × Orientação (60x40 e 70x50 em Retrato e Paisagem, os demais tamanhos só em Paisagem)."
+              }
             >
               {exportTrayVariationsMutation.isPending ? "..." : "Gerar variações"}
             </Button>
+            <label
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              title="Marque quando a arte não pode ser reenquadrada em retrato — remove a orientação Retrato de todos os tamanhos, inclusive 60x40 e 70x50."
+            >
+              <Checkbox
+                checked={onlyLandscapeVariations}
+                onCheckedChange={(checked) => setOnlyLandscapeVariations(checked === true)}
+              />
+              Sem retrato (só paisagem)
+            </label>
             <Button
               size="sm"
               variant="outline"
@@ -711,45 +741,99 @@ export default function CatalogPage() {
             (2) clique <strong>Aprovar</strong>,{" "}
             (3) com os mesmos produtos ainda marcados, clique <strong>Gerar imagens</strong> — o sistema gera 3 imagens por produto (~1.5 min cada) e salva na sua pasta do Drive.{" "}
             (4) Quando a coluna GERAÇÃO mostrar <strong className="text-emerald-600">✅ pronto</strong>, clique <strong>Exportar Tray</strong> e importe na sua loja.{" "}
-            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com 10 variações por produto (Tamanho × Orientação) pronto pra importar.{" "}
+            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com as variações por produto (Tamanho × Orientação) pronto pra importar; marque <strong>Sem retrato</strong> se a arte não puder ser reenquadrada em retrato.{" "}
             Quando as variações já estiverem na loja, clique <strong>Marcar como cadastrado</strong>.
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por SKU, nome, marca..."
-              className="w-56"
-            />
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="suggested">Sugeridos</SelectItem>
-                <SelectItem value="approved">Aprovados</SelectItem>
-                <SelectItem value="generating">Gerando</SelectItem>
-                <SelectItem value="generated">Gerados</SelectItem>
-                <SelectItem value="exported">Cadastrado na Tray</SelectItem>
-                <SelectItem value="rejected">Rejeitados</SelectItem>
-                <SelectItem value="error">Com erro</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={genFilter} onValueChange={(v) => setGenFilter(v as GenFilter)}>
-              <SelectTrigger className="w-44" title="Filtrar por status de geração de imagens">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Geração: todos</SelectItem>
-                <SelectItem value="generated">✅ pronto</SelectItem>
-                <SelectItem value="in_progress">⚙️ gerando</SelectItem>
-                <SelectItem value="queued">⏳ na fila</SelectItem>
-                <SelectItem value="failed">❌ falha</SelectItem>
-                <SelectItem value="none">Não gerado</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="catalog-search" className="text-xs text-muted-foreground">
+                Pesquisar
+              </Label>
+              <Input
+                id="catalog-search"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por SKU, nome, marca..."
+                className="w-56"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="catalog-status-filter" className="text-xs text-muted-foreground">
+                Status
+              </Label>
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+                <SelectTrigger id="catalog-status-filter" className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="suggested">Sugeridos</SelectItem>
+                  <SelectItem value="approved">Aprovados</SelectItem>
+                  <SelectItem value="generating">Gerando</SelectItem>
+                  <SelectItem value="generated">Gerados</SelectItem>
+                  <SelectItem value="exported">Cadastrado na Tray</SelectItem>
+                  <SelectItem value="rejected">Rejeitados</SelectItem>
+                  <SelectItem value="error">Com erro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="catalog-gen-filter" className="text-xs text-muted-foreground">
+                Geração
+              </Label>
+              <Select value={genFilter} onValueChange={(v) => setGenFilter(v as GenFilter)}>
+                <SelectTrigger id="catalog-gen-filter" className="w-44" title="Filtrar por status de geração de imagens">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Geração: todos</SelectItem>
+                  <SelectItem value="generated">✅ pronto</SelectItem>
+                  <SelectItem value="in_progress">⚙️ gerando</SelectItem>
+                  <SelectItem value="queued">⏳ na fila</SelectItem>
+                  <SelectItem value="failed">❌ falha</SelectItem>
+                  <SelectItem value="none">Não gerado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="catalog-generated-from" className="text-xs text-muted-foreground">
+                Gerado de
+              </Label>
+              <Input
+                id="catalog-generated-from"
+                type="date"
+                value={generatedFrom}
+                onChange={(e) => setGeneratedFrom(e.target.value)}
+                className="w-40"
+                title="Filtrar por data de geração — a partir de"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="catalog-generated-to" className="text-xs text-muted-foreground">
+                até
+              </Label>
+              <Input
+                id="catalog-generated-to"
+                type="date"
+                value={generatedTo}
+                onChange={(e) => setGeneratedTo(e.target.value)}
+                className="w-40"
+                title="Filtrar por data de geração — até"
+              />
+            </div>
+            {(generatedFrom || generatedTo) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setGeneratedFrom("");
+                  setGeneratedTo("");
+                }}
+              >
+                Limpar datas
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
@@ -866,7 +950,26 @@ type GenInfo = {
   genStep?: number | null;
   genError?: string | null;
   genQueuedAt?: Date | string | null;
+  generatedAt?: Date | string | null;
 };
+
+function formatDatePtBr(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("pt-BR");
+}
+
+/** Chave "YYYY-MM-DD" em horário local, comparável com o valor de <input type="date">. */
+function generatedDateKey(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function classifyGen(p: GenInfo): Exclude<GenFilter, "all"> {
   if (p.imageUrl1 && p.imageUrl2 && p.imageUrl3) return "generated";
@@ -913,7 +1016,14 @@ function generationCellLabel(p: GenInfo): React.ReactNode {
   if (p.genError && p.genCompletedAt) {
     return <span className="text-destructive" title={p.genError}>❌ falha</span>;
   }
-  if (p.imageUrl1 && p.imageUrl2 && p.imageUrl3) return <span className="font-medium text-emerald-600">✅ pronto</span>;
+  if (p.imageUrl1 && p.imageUrl2 && p.imageUrl3) {
+    const date = formatDatePtBr(p.generatedAt ?? p.genCompletedAt);
+    return (
+      <span className="font-medium text-emerald-600">
+        ✅ pronto{date ? <span className="ml-1 font-normal text-muted-foreground">({date})</span> : null}
+      </span>
+    );
+  }
   if (p.genStartedAt && !p.genCompletedAt) {
     return <span className="text-blue-600">⚙️ gerando {p.genStep ?? 0}/3</span>;
   }
