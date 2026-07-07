@@ -177,7 +177,7 @@ export default function CatalogPage() {
           rows: res.rows,
         });
         toast.success(
-          `${res.products} produto(s) → ${res.rows} variações geradas (32 por produto).`,
+          `${res.products} produto(s) → ${res.rows} variações geradas (10 por produto).`,
           { duration: 6000 },
         );
         if (res.skipped.length > 0) {
@@ -186,17 +186,6 @@ export default function CatalogPage() {
             res.skipped.length > 3 ? `, +${res.skipped.length - 3}` : "";
           toast.warning(
             `${res.skipped.length} SKU(s) sem 'Código do produto (ID)' na planilha: ${preview}${suffix}`,
-            { duration: 8000 },
-          );
-        }
-        if (res.skusSemMockupPorMoldura.length > 0) {
-          const preview = res.skusSemMockupPorMoldura.slice(0, 3).join(", ");
-          const suffix =
-            res.skusSemMockupPorMoldura.length > 3
-              ? `, +${res.skusSemMockupPorMoldura.length - 3}`
-              : "";
-          toast.warning(
-            `${res.skusSemMockupPorMoldura.length} produto(s) sem mockup por moldura (gerados antes dessa mudança) — variações sem imagem: ${preview}${suffix}`,
             { duration: 8000 },
           );
         }
@@ -695,7 +684,7 @@ export default function CatalogPage() {
               variant="outline"
               disabled={exportTrayVariationsMutation.isPending}
               onClick={() => trayVariationsInputRef.current?.click()}
-              title="Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 32 variações por produto: 4 molduras × 8 tamanhos."
+              title="Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 10 variações por produto: Tamanho × Orientação (60x40 e 70x50 em Retrato e Paisagem, os demais tamanhos só em Paisagem)."
             >
               {exportTrayVariationsMutation.isPending ? "..." : "Gerar variações"}
             </Button>
@@ -722,7 +711,7 @@ export default function CatalogPage() {
             (2) clique <strong>Aprovar</strong>,{" "}
             (3) com os mesmos produtos ainda marcados, clique <strong>Gerar imagens</strong> — o sistema gera 3 imagens por produto (~1.5 min cada) e salva na sua pasta do Drive.{" "}
             (4) Quando a coluna GERAÇÃO mostrar <strong className="text-emerald-600">✅ pronto</strong>, clique <strong>Exportar Tray</strong> e importe na sua loja.{" "}
-            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com 32 variações por produto (4 molduras × 8 tamanhos) pronto pra importar.{" "}
+            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com 10 variações por produto (Tamanho × Orientação) pronto pra importar.{" "}
             Quando as variações já estiverem na loja, clique <strong>Marcar como cadastrado</strong>.
           </div>
 

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import type { Orientation } from '../_core/orientation';
 
 type DeliveryType = 'lifestyle' | 'mockup' | 'video';
 type FrameType = 'light_wood' | 'dark_wood' | 'white' | 'black';
@@ -139,6 +140,23 @@ const MOCKUP_RECOLOR_FIDELITY = [
   'Do NOT add, remove, resize, recrop, or move anything else in the photo.',
 ].join(' ');
 
+// Aspecto da FOTO gerada por orientação do quadro. Retrato é o padrão
+// histórico do catálogo (3:4); quadros horizontais (ex: obras clássicas tipo
+// "Santa Ceia") precisam de foto larga (4:3) — senão a arte sai espremida ou
+// cortada dentro de uma moldura vertical que não corresponde ao produto real.
+const ASPECT_RATIO_BY_ORIENTATION: Record<Orientation, string> = {
+  vertical: '3:4',
+  horizontal: '4:3',
+};
+
+// Reforça pro modelo que a MOLDURA em si (não só a foto) deve ser larga —
+// sem isso ele tende a desenhar uma moldura vertical mesmo numa foto 4:3.
+const ORIENTATION_CLAUSE: Record<Orientation, string> = {
+  vertical: 'The framed print is in a VERTICAL (portrait) orientation — taller than it is wide.',
+  horizontal:
+    'CRITICAL — HORIZONTAL FRAME: the framed print is in a HORIZONTAL (landscape) orientation — noticeably wider than it is tall. Do NOT rotate it, crop it into a square, or present it as a vertical/portrait frame.',
+};
+
 // Material/finish constraints — aplicado em TODO prompt (lifestyle, mockup, vídeo).
 // Os quadros são impressos em papel sublimado fosco; nunca tem vidro.
 const FINISH_CONSTRAINTS = [
@@ -246,7 +264,12 @@ class PromptAgentService {
     }
   }
 
-  private buildLifestylePrompt(frame: FrameType, room: RoomType, style: StyleType): string {
+  private buildLifestylePrompt(
+    frame: FrameType,
+    room: RoomType,
+    style: StyleType,
+    orientation: Orientation = 'vertical',
+  ): string {
     return [
       `${STYLE_DESCRIPTIONS[style]} applied to ${ROOM_DESCRIPTIONS[room]}.`,
       // Visual style — editorial real, não pode ter cara de AI/CG. Cores
@@ -260,22 +283,24 @@ class PromptAgentService {
       `Curated decor (small and supporting): at most one small object partially visible near the frame's edge — a ceramic vase or a stack of design books — not a full styled tablescape. No wide-angle pull-back showing entire rooms.`,
       `The LARGE framed print is the absolute visual anchor. It dominates the composition unmistakably — the eye goes to the artwork first — while the room around it stays clearly identifiable, just visually secondary.`,
       `Frame: thin, ${FRAME_DESCRIPTIONS[frame]}, intentionally chosen to harmonize with the room's palette and decor.`,
+      ORIENTATION_CLAUSE[orientation],
       FINISH_CONSTRAINTS,
       ARTWORK_FIDELITY,
       NO_TEXT_CONSTRAINT,
-      `Aspect ratio 3:4.`,
+      `Aspect ratio ${ASPECT_RATIO_BY_ORIENTATION[orientation]}.`,
     ].join(' ');
   }
 
-  private buildMockupPrompt(frame: FrameType): string {
+  private buildMockupPrompt(frame: FrameType, orientation: Orientation = 'vertical'): string {
     return [
       `Clean e-commerce product mockup. LARGE framed print centered on a plain off-white or very light warm gray wall, occupying the majority of the visible composition so the artwork dominates the frame.`,
       `Frame: thin ${FRAME_DESCRIPTIONS[frame]} molding, with the printed artwork mounted flush against the inner edge of the wood. The print extends from one inner edge of the frame to the other with zero gap — wood touches print directly on all four sides.`,
+      ORIENTATION_CLAUSE[orientation],
       FINISH_CONSTRAINTS,
       `Straight frontal view, perfectly centered. Soft uniform studio lighting from the front-left, very subtle shadow on the right side to give depth, no harsh shadows. Minimalist premium product photography.`,
       ARTWORK_FIDELITY,
       NO_TEXT_CONSTRAINT,
-      `Aspect ratio 3:4.`,
+      `Aspect ratio ${ASPECT_RATIO_BY_ORIENTATION[orientation]}.`,
     ].join(' ');
   }
 
@@ -286,17 +311,18 @@ class PromptAgentService {
    * gerada, em vez de gerar cada cor do zero a partir da arte crua —
    * gerar do zero produzia fotos visivelmente diferentes entre si.
    */
-  buildMockupRecolorPrompt(toFrame: FrameType): string {
+  buildMockupRecolorPrompt(toFrame: FrameType, orientation: Orientation = 'vertical'): string {
     return [
       MOCKUP_RECOLOR_FIDELITY,
       `THE ONLY CHANGE ALLOWED: repaint the wood frame molding to ${FRAME_DESCRIPTIONS[toFrame]}. Same thin molding shape, same proportions, same construction — only its color/material finish changes.`,
+      ORIENTATION_CLAUSE[orientation],
       FINISH_CONSTRAINTS,
       NO_TEXT_CONSTRAINT,
-      `Aspect ratio 3:4.`,
+      `Aspect ratio ${ASPECT_RATIO_BY_ORIENTATION[orientation]}.`,
     ].join(' ');
   }
 
-  private buildVideoPrompt(frame: FrameType): string {
+  private buildVideoPrompt(frame: FrameType, orientation: Orientation = 'vertical'): string {
     return [
       `Use the uploaded image as the scene reference.`,
       ARTWORK_FIDELITY,
@@ -305,7 +331,9 @@ class PromptAgentService {
       `The LARGE framed artwork is the focal point and must remain identical to the reference image throughout the entire video — same colors, composition and details in every frame. Do not alter the artwork at any point.`,
       `Opening scene: young Brazilian woman, dark hair, 25–35 years old, casual linen outfit in neutral ivory tones, natural makeup, hanging the framed artwork shown in the reference image on a wall, arms raised, satisfied expression, warm golden sunlight streaming through a side window, candid authentic lifestyle moment, real refined home feel, not a photoshoot.`,
       `Then camera slowly pulls back and pans to show the framed artwork directly from the front, large and centered on the wall as the visual anchor, artwork clearly visible and identical to the reference image, no person in frame, soft even lighting, clean editorial product shot.`,
-      `Frame: thin ${FRAME_DESCRIPTIONS[frame]}, harmonized with the room's palette. Style: photorealistic, cinematic, refined editorial home decor, smooth camera motion, warm natural light throughout. Duration: 8 seconds. Aspect ratio: 16:9.`,
+      `Frame: thin ${FRAME_DESCRIPTIONS[frame]}, harmonized with the room's palette.`,
+      ORIENTATION_CLAUSE[orientation],
+      `Style: photorealistic, cinematic, refined editorial home decor, smooth camera motion, warm natural light throughout. Duration: 8 seconds. Aspect ratio: 16:9.`,
     ].join(' ');
   }
 
@@ -316,11 +344,36 @@ class PromptAgentService {
    * sublimado matte, sem vidro, deep focus, editorial não-AI) em vez de cair
    * em prompt hardcoded.
    */
-  buildLifestyleStill16x9(frame: FrameType, room: RoomType, style: StyleType): string {
-    return this.buildLifestylePrompt(frame, room, style).replace(
-      'Aspect ratio 3:4.',
+  buildLifestyleStill16x9(
+    frame: FrameType,
+    room: RoomType,
+    style: StyleType,
+    orientation: Orientation = 'vertical',
+  ): string {
+    return this.buildLifestylePrompt(frame, room, style, orientation).replace(
+      `Aspect ratio ${ASPECT_RATIO_BY_ORIENTATION[orientation]}.`,
       'Aspect ratio 16:9.',
     );
+  }
+
+  /**
+   * Aplica a orientação a um prompt de mockup/vídeo carregado do .md
+   * (texto escrito à mão, sempre pensado pra quadro vertical). Em vez de
+   * reescrever o .md, faz um patch pontual: troca o aspect ratio (só no
+   * mockup — vídeo mantém 16:9 fixo, que é o enquadramento da CENA, não do
+   * quadro) e acrescenta a cláusula de orientação no final.
+   */
+  private applyOrientationToMarkdownPrompt(
+    prompt: string,
+    deliveryType: 'mockup' | 'video',
+    orientation: Orientation,
+  ): string {
+    if (orientation === 'vertical') return prompt;
+    const withAspect =
+      deliveryType === 'mockup'
+        ? prompt.replace('Aspect ratio 3:4.', `Aspect ratio ${ASPECT_RATIO_BY_ORIENTATION.horizontal}.`)
+        : prompt;
+    return `${withAspect} ${ORIENTATION_CLAUSE.horizontal}`;
   }
 
   /**
@@ -330,24 +383,28 @@ class PromptAgentService {
   getPrompt(
     deliveryType: 'mockup' | 'video',
     frameType: FrameType,
+    orientation?: Orientation,
   ): string;
   getPrompt(
     deliveryType: 'lifestyle',
     frameType: FrameType,
     roomType: RoomType,
     styleType: StyleType,
+    orientation?: Orientation,
   ): string;
   getPrompt(
     deliveryType: DeliveryType,
     frameType: FrameType,
-    roomType?: RoomType,
+    roomTypeOrOrientation?: RoomType | Orientation,
     styleType?: StyleType,
+    orientation?: Orientation,
   ): string {
     if (deliveryType === 'lifestyle') {
+      const roomType = roomTypeOrOrientation as RoomType | undefined;
       if (!roomType || !styleType) {
         throw new Error('lifestyle requires roomType and styleType');
       }
-      return this.buildLifestylePrompt(frameType, roomType, styleType);
+      return this.buildLifestylePrompt(frameType, roomType, styleType, orientation ?? 'vertical');
     }
 
     const key = `${deliveryType}-${frameType}`;
@@ -355,7 +412,8 @@ class PromptAgentService {
     if (!prompt) {
       throw new Error(`Prompt not found for key: ${key}`);
     }
-    return prompt;
+    const mockupOrVideoOrientation = (roomTypeOrOrientation as Orientation | undefined) ?? 'vertical';
+    return this.applyOrientationToMarkdownPrompt(prompt, deliveryType, mockupOrVideoOrientation);
   }
 
   /**
@@ -368,8 +426,11 @@ class PromptAgentService {
     frameType: FrameType;
     roomType?: RoomType;
     styleType?: StyleType;
+    /** Orientação do quadro (largura vs altura da arte original). Padrão: vertical. */
+    orientation?: Orientation;
   }): PromptVariation[] {
     const variations: PromptVariation[] = [];
+    const orientation = input.orientation ?? 'vertical';
 
     for (const deliveryType of input.deliveryTypes) {
       if (deliveryType === 'lifestyle') {
@@ -381,13 +442,19 @@ class PromptAgentService {
           frameType: input.frameType,
           roomType: input.roomType,
           styleType: input.styleType,
-          prompt: this.getPrompt('lifestyle', input.frameType, input.roomType, input.styleType),
+          prompt: this.getPrompt(
+            'lifestyle',
+            input.frameType,
+            input.roomType,
+            input.styleType,
+            orientation,
+          ),
         });
       } else {
         variations.push({
           type: deliveryType,
           frameType: input.frameType,
-          prompt: this.getPrompt(deliveryType, input.frameType),
+          prompt: this.getPrompt(deliveryType, input.frameType, orientation),
         });
       }
     }
@@ -398,4 +465,4 @@ class PromptAgentService {
 
 export const promptAgentService = new PromptAgentService();
 export { FRAMES, ROOMS, STYLES };
-export type { FrameType, RoomType, StyleType, DeliveryType, PromptVariation };
+export type { FrameType, RoomType, StyleType, DeliveryType, PromptVariation, Orientation };

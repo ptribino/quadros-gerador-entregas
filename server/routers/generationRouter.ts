@@ -3,7 +3,27 @@ import { publicProcedure, router } from '../_core/trpc';
 import { promptAgentService } from '../services/promptAgentService';
 import { googleImagenService } from '../services/freepikService';
 import { googleVeoService } from '../services/googleVeoService';
+import { detectOrientation, type Orientation } from '../_core/orientation';
 import { TRPCError } from '@trpc/server';
+
+/**
+ * Extrai os bytes da imagem de referência (sempre uma data URL vinda do
+ * ImageSelector — upload local ou arquivo do Drive já convertido) pra
+ * detectar orientação. Se vier uma URL externa por algum motivo, tenta
+ * baixar; falha nunca deve travar a geração (ver uso com try/catch).
+ */
+async function bufferFromImageUrl(url: string): Promise<Buffer> {
+  if (url.startsWith('data:')) {
+    const base64 = url.split(',')[1];
+    if (!base64) throw new Error('Invalid data URL: no base64 content');
+    return Buffer.from(base64, 'base64');
+  }
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch reference image: ${response.status}`);
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
 
 const FRAME_TYPES = ['light_wood', 'dark_wood', 'white', 'black'] as const;
 const ROOM_TYPES = [
@@ -55,11 +75,24 @@ export const generationRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
+        // Orientação real da arte (largura vs altura) — quadros horizontais
+        // (ex: obras clássicas tipo "Santa Ceia") precisam ser apresentados
+        // em paisagem em vez do padrão retrato do catálogo. Falha ao detectar
+        // nunca deve travar a geração — cai pra vertical (comportamento antigo).
+        let orientation: Orientation = 'vertical';
+        try {
+          orientation = await detectOrientation(await bufferFromImageUrl(input.imageUrl));
+        } catch (error) {
+          console.error('[Generation] Failed to detect artwork orientation, defaulting to vertical:', error);
+        }
+        const aspectRatio = orientation === 'horizontal' ? '4:3' : '3:4';
+
         const variations = promptAgentService.buildVariationsForRequest({
           deliveryTypes: input.deliveryTypes,
           frameType: input.frameType,
           roomType: input.roomType,
           styleType: input.styleType,
+          orientation,
         });
 
         const generationResults = [];
@@ -79,6 +112,7 @@ export const generationRouter = router({
                 promptVariation.frameType,
                 input.roomType,
                 input.styleType,
+                orientation,
               );
 
               console.log('[Generation] Step 1: Generating still frame with Gemini (preserving artwork fidelity)...');
@@ -141,7 +175,7 @@ export const generationRouter = router({
                 prompt: promptVariation.prompt,
                 referenceImageUrl: input.imageUrl,
                 numImages: 1,
-                aspectRatio: '3:4',
+                aspectRatio,
               });
 
               generationResults.push({

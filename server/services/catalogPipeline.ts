@@ -11,12 +11,13 @@
  */
 import sharp from "sharp";
 import { ENV } from "../_core/env";
+import { detectOrientation } from "../_core/orientation";
 import { googleDriveService } from "./googleDriveService";
 import { googleImagenService } from "./freepikService";
 import { promptAgentService, FRAMES, framesForStyle } from "./promptAgentService";
-import type { FrameType, RoomType, StyleType } from "./promptAgentService";
+import type { FrameType, RoomType, StyleType, Orientation } from "./promptAgentService";
 
-export type { FrameType, RoomType, StyleType };
+export type { FrameType, RoomType, StyleType, Orientation };
 
 export interface PipelineDeps {
   /** Token Google OAuth do usuário dono do produto. */
@@ -164,17 +165,19 @@ async function generateLifestyle(
   room: RoomType,
   style: StyleType,
   referenceDataUrl: string,
+  orientation: Orientation,
 ): Promise<{ buffer: Buffer; mimeType: string }> {
-  const prompt = promptAgentService.getPrompt("lifestyle", frame, room, style);
-  return runGeneration(prompt, referenceDataUrl, `lifestyle/${frame}/${room}/${style}`);
+  const prompt = promptAgentService.getPrompt("lifestyle", frame, room, style, orientation);
+  return runGeneration(prompt, referenceDataUrl, `lifestyle/${frame}/${room}/${style}`, orientation);
 }
 
 async function generateMockup(
   frame: FrameType,
   referenceDataUrl: string,
+  orientation: Orientation,
 ): Promise<{ buffer: Buffer; mimeType: string }> {
-  const prompt = promptAgentService.getPrompt("mockup", frame);
-  return runGeneration(prompt, referenceDataUrl, `mockup/${frame}`);
+  const prompt = promptAgentService.getPrompt("mockup", frame, orientation);
+  return runGeneration(prompt, referenceDataUrl, `mockup/${frame}`, orientation);
 }
 
 /**
@@ -187,21 +190,23 @@ async function generateMockup(
 async function recolorMockup(
   toFrame: FrameType,
   baseMockupDataUrl: string,
+  orientation: Orientation,
 ): Promise<{ buffer: Buffer; mimeType: string }> {
-  const prompt = promptAgentService.buildMockupRecolorPrompt(toFrame);
-  return runGeneration(prompt, baseMockupDataUrl, `mockup-recolor/${toFrame}`);
+  const prompt = promptAgentService.buildMockupRecolorPrompt(toFrame, orientation);
+  return runGeneration(prompt, baseMockupDataUrl, `mockup-recolor/${toFrame}`, orientation);
 }
 
 async function runGeneration(
   prompt: string,
   referenceDataUrl: string,
   label: string,
+  orientation: Orientation,
 ): Promise<{ buffer: Buffer; mimeType: string }> {
   const result = await googleImagenService.generateImages({
     prompt,
     referenceImageUrl: referenceDataUrl,
     numImages: 1,
-    aspectRatio: "3:4",
+    aspectRatio: orientation === "horizontal" ? "4:3" : "3:4",
   });
 
   const img = result.images?.[0];
@@ -254,6 +259,11 @@ export async function runForProduct(
   const originalBuffer = await googleDriveService.downloadFile(accessToken, product.sourceDriveFileId);
   const originalMime = product.sourceDriveMimeType || "image/jpeg";
   const referenceDataUrl = `data:${originalMime};base64,${originalBuffer.toString("base64")}`;
+
+  // Orientação real da arte (largura vs altura) — quadros horizontais (ex:
+  // obras clássicas tipo "Santa Ceia") precisam ser apresentados em paisagem
+  // em vez do padrão retrato do catálogo.
+  const orientation = await detectOrientation(originalBuffer);
 
   // Nomes ESTÁVEIS — sem incluir frame/room/style sorteados, pra que o cleanup
   // (uploadFileReplacing) consiga encontrar o arquivo antigo no caso de re-geração.
@@ -309,7 +319,7 @@ export async function runForProduct(
   const proRoom: RoomType = forceOffice ? "office" : proRoomRandom;
 
   // ETAPA 2 — Lifestyle "regular"
-  const lifeRaw = await generateLifestyle(frame, regularRoom, regularStyle, referenceDataUrl);
+  const lifeRaw = await generateLifestyle(frame, regularRoom, regularStyle, referenceDataUrl, orientation);
   const life = await fitForEcommerce(lifeRaw.buffer);
   const lifeFile = await googleDriveService.uploadFileReplacing(
     accessToken,
@@ -322,7 +332,7 @@ export async function runForProduct(
   await onProgress?.(1, `lifestyle ${frame}/${regularRoom}/${regularStyle}`);
 
   // ETAPA 3 — Segunda lifestyle (mesmo pool de cômodos, sorteio independente)
-  const proRaw = await generateLifestyle(frame, proRoom, proStyle, referenceDataUrl);
+  const proRaw = await generateLifestyle(frame, proRoom, proStyle, referenceDataUrl, orientation);
   const pro = await fitForEcommerce(proRaw.buffer);
   const proFile = await googleDriveService.uploadFileReplacing(
     accessToken,
@@ -345,7 +355,7 @@ export async function runForProduct(
   const mockupUrls = {} as Record<FrameType, string>;
   const [baseFrame, ...otherFrames] = [frame, ...FRAMES.filter((f) => f !== frame)];
 
-  const baseRaw = await generateMockup(baseFrame, referenceDataUrl);
+  const baseRaw = await generateMockup(baseFrame, referenceDataUrl, orientation);
   const baseReferenceDataUrl = `data:${baseRaw.mimeType};base64,${baseRaw.buffer.toString("base64")}`;
   const baseFitted = await fitForEcommerce(baseRaw.buffer);
   const baseFile = await googleDriveService.uploadFileReplacing(
@@ -359,7 +369,7 @@ export async function runForProduct(
   mockupUrls[baseFrame] = googleDriveService.publicDownloadUrl(baseFile.id);
 
   for (const otherFrame of otherFrames) {
-    const recoloredRaw = await recolorMockup(otherFrame, baseReferenceDataUrl);
+    const recoloredRaw = await recolorMockup(otherFrame, baseReferenceDataUrl, orientation);
     const recolored = await fitForEcommerce(recoloredRaw.buffer);
     const file = await googleDriveService.uploadFileReplacing(
       accessToken,

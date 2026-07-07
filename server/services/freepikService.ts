@@ -66,6 +66,11 @@ class GoogleImagenService {
         contents: [{ parts }],
         generationConfig: {
           responseModalities: ['TEXT', 'IMAGE'],
+          // Antes esse campo era só decorativo — a proporção real dependia
+          // 100% do modelo interpretar a frase "Aspect ratio X:Y." no prompt.
+          // O Gemini image model aceita esse aspect ratio como parâmetro de
+          // fato (não só sugestão textual), então aplicamos aqui também.
+          ...(request.aspectRatio ? { imageConfig: { aspectRatio: request.aspectRatio } } : {}),
         },
       };
 
