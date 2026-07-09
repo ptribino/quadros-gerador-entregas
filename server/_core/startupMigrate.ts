@@ -15,45 +15,53 @@ import { sql } from "drizzle-orm";
 
 // Mapeamento code3 → (Tray catN1, Tray catN2) usando categorias reais da loja.
 // Mantenha em sincronia com scripts/seedCategoryCodes.ts.
+//
+// 6º elemento = trayEstiloAdicional: subcategoria de Estilos a exportar como
+// categoria ADICIONAL (além da principal), pra categorias cuja principal já é
+// Temas — evita o cadastro manual de Estilo na Tray depois da importação.
+// null quando a principal já é Estilos (redundante) ou quando nenhum Estilo
+// combina com a categoria. Valores confirmados/ajustados com a Priscila em
+// 2026-07-08 (Animais→Clássicos, Cidades→Contemporâneos); os demais são
+// palpite por analogia — é só um dado, fácil de corrigir depois.
 const SEEDS = [
-  ["#AB Artes Abstratas",     "Artes Abstratas",     "ABS", "Estilos", "Abstratos"],
+  ["#AB Artes Abstratas",     "Artes Abstratas",     "ABS", "Estilos", "Abstratos",             null],
   // ACL: pasta renomeada (Arte Clássica → Arte Cósmica); conteúdo é arte mística/espiritual.
-  ["#AC Arte Cósmica",        "Arte Cósmica",        "ACL", "Estilos", "Contemporâneos"],
-  ["#AL Alcohol Ink",         "Alcohol Ink",         "AIK", "Estilos", "Abstratos"],
-  ["#AN Vida Animal",         "Vida Animal",         "ANI", "Temas",   "Animais"],
-  ["#BD Bebidas e Drinks",    "Bebidas e Drinks",    "BBD", "Temas",   "Gastronomia e Bebidas"],
-  ["#ES Esculturas Hipsters", "Esculturas Hipsters", "ESC", "Estilos", "Contemporâneos"],
-  ["#FG Formas Geométricas",  "Formas Geométricas",  "FGE", "Estilos", "Geométricos"],
-  ["#FP Flores e Plantas",    "Flores e Plantas",    "FLO", "Temas",   "Botânicos"],
-  ["#FR Frases e Citações",   "Frases e Citações",   "FRA", "Temas",   "Frases"],
-  ["#GP Galáxias e Planetas", "Galáxias e Planetas", "GLX", "Temas",   "Galáxias e Planetas"],
-  ["#IN Tema Infantil",       "Tema Infantil",       "INF", "Temas",   "Kids/Infantil"],
-  ["#MF Mulheres Floridas",   "Mulheres Floridas",   "MUF", "Temas",   "Femininos"],
-  ["#PN Paisagens Naturais",  "Paisagens Naturais",  "PAI", "Temas",   "Natureza e Paisagens"],
-  ["#PO Pinturas a Óleo",     "Pinturas a Óleo",     "POL", "Estilos", "Clássicos"],
+  ["#AC Arte Cósmica",        "Arte Cósmica",        "ACL", "Estilos", "Contemporâneos",         null],
+  ["#AL Alcohol Ink",         "Alcohol Ink",         "AIK", "Estilos", "Abstratos",              null],
+  ["#AN Vida Animal",         "Vida Animal",         "ANI", "Temas",   "Animais",                "Clássicos"],
+  ["#BD Bebidas e Drinks",    "Bebidas e Drinks",    "BBD", "Temas",   "Gastronomia e Bebidas",  "Contemporâneos"],
+  ["#ES Esculturas Hipsters", "Esculturas Hipsters", "ESC", "Estilos", "Contemporâneos",         null],
+  ["#FG Formas Geométricas",  "Formas Geométricas",  "FGE", "Estilos", "Geométricos",            null],
+  ["#FP Flores e Plantas",    "Flores e Plantas",    "FLO", "Temas",   "Botânicos",              "Boho"],
+  ["#FR Frases e Citações",   "Frases e Citações",   "FRA", "Temas",   "Frases",                 "Minimalistas"],
+  ["#GP Galáxias e Planetas", "Galáxias e Planetas", "GLX", "Temas",   "Galáxias e Planetas",    "Contemporâneos"],
+  ["#IN Tema Infantil",       "Tema Infantil",       "INF", "Temas",   "Kids/Infantil",          null],
+  ["#MF Mulheres Floridas",   "Mulheres Floridas",   "MUF", "Temas",   "Femininos",              "Boho"],
+  ["#PN Paisagens Naturais",  "Paisagens Naturais",  "PAI", "Temas",   "Natureza e Paisagens",   "Clássicos"],
+  ["#PO Pinturas a Óleo",     "Pinturas a Óleo",     "POL", "Estilos", "Clássicos",              null],
   // TRD: placeholder até Priscila criar categoria "Trios" na Tray
-  ["#TD Trios Diversos",      "Trios Diversos",      "TRD", "Temas",   "Trios"],
-  ["#VD Veículos Diversos",   "Veículos Diversos",   "VEI", "Temas",   "Veículos"],
+  ["#TD Trios Diversos",      "Trios Diversos",      "TRD", "Temas",   "Trios",                  null],
+  ["#VD Veículos Diversos",   "Veículos Diversos",   "VEI", "Temas",   "Veículos",               "Contemporâneos"],
   // WIN: pasta renomeada (Wine and Red → White and Red); conteúdo mudou pra paleta cromática.
-  ["#WR White and Red",       "White and Red",       "WIN", "Estilos", "Contemporâneos"],
+  ["#WR White and Red",       "White and Red",       "WIN", "Estilos", "Contemporâneos",         null],
   // Categorias reais da Tray (export de categorias, 2026-07-05) sem pasta
   // correspondente no banco de imagens do Drive — ficam "(sem pasta)" no
   // dropdown de categoria, então quem gerar sugestões com elas precisa
   // colar o link da pasta manualmente (folderId não é auto-preenchido).
-  ["Sala",           "Sala",           "SAL", "Ambientes", "Sala"],
-  ["Quarto",         "Quarto",         "QRT", "Ambientes", "Quarto"],
-  ["Escritório",     "Escritório",     "ESR", "Ambientes", "Escritório"],
-  ["Cozinha",        "Cozinha",        "COZ", "Ambientes", "Cozinha"],
-  ["Lavabo",         "Lavabo",         "LAV", "Ambientes", "Lavabo"],
-  ["Área Gourmet",   "Área Gourmet",   "GOU", "Ambientes", "Área Gourmet"],
-  ["Line Art",       "Line Art",       "LNA", "Estilos",   "Line Art"],
-  ["Minimalistas",   "Minimalistas",   "MIN", "Estilos",   "Minimalistas"],
-  ["Japandi",        "Japandi",        "JAP", "Estilos",   "Japandi"],
-  ["Boho",           "Boho",           "BOH", "Estilos",   "Boho"],
-  ["Cidades",        "Cidades",        "CID", "Temas",     "Cidades"],
-  ["Religiosos",     "Religiosos",     "REL", "Temas",     "Religiosos"],
-  ["Jairo Rosas",    "Jairo Rosas",    "JRO", "Artistas",  "Jairo Rosas"],
-  ["Renan Santos",   "Renan Santos",   "RSA", "Artistas",  "Renan Santos"],
+  ["Sala",           "Sala",           "SAL", "Ambientes", "Sala",           null],
+  ["Quarto",         "Quarto",         "QRT", "Ambientes", "Quarto",         null],
+  ["Escritório",     "Escritório",     "ESR", "Ambientes", "Escritório",     null],
+  ["Cozinha",        "Cozinha",        "COZ", "Ambientes", "Cozinha",        null],
+  ["Lavabo",         "Lavabo",         "LAV", "Ambientes", "Lavabo",         null],
+  ["Área Gourmet",   "Área Gourmet",   "GOU", "Ambientes", "Área Gourmet",   null],
+  ["Line Art",       "Line Art",       "LNA", "Estilos",   "Line Art",       null],
+  ["Minimalistas",   "Minimalistas",   "MIN", "Estilos",   "Minimalistas",   null],
+  ["Japandi",        "Japandi",        "JAP", "Estilos",   "Japandi",        null],
+  ["Boho",           "Boho",           "BOH", "Estilos",   "Boho",           null],
+  ["Cidades",        "Cidades",        "CID", "Temas",     "Cidades",        "Contemporâneos"],
+  ["Religiosos",     "Religiosos",     "REL", "Temas",     "Religiosos",     null],
+  ["Jairo Rosas",    "Jairo Rosas",    "JRO", "Artistas",  "Jairo Rosas",    null],
+  ["Renan Santos",   "Renan Santos",   "RSA", "Artistas",  "Renan Santos",   null],
 ] as const;
 
 export async function runStartupMigrations() {
@@ -115,15 +123,16 @@ export async function runStartupMigrations() {
 
     // Seed idempotente das categorias
     let inserted = 0;
-    for (const [folderName, displayName, code3, principal, sub] of SEEDS) {
+    for (const [folderName, displayName, code3, principal, sub, estiloAdicional] of SEEDS) {
       const result: any = await db.execute(
         sql`INSERT INTO category_codes
-            (folderName, displayName, code3, trayCategoriaPrincipal, traySubcategoria)
-            VALUES (${folderName}, ${displayName}, ${code3}, ${principal}, ${sub})
+            (folderName, displayName, code3, trayCategoriaPrincipal, traySubcategoria, trayEstiloAdicional)
+            VALUES (${folderName}, ${displayName}, ${code3}, ${principal}, ${sub}, ${estiloAdicional})
             ON DUPLICATE KEY UPDATE
               displayName = VALUES(displayName),
               trayCategoriaPrincipal = VALUES(trayCategoriaPrincipal),
-              traySubcategoria = VALUES(traySubcategoria)`,
+              traySubcategoria = VALUES(traySubcategoria),
+              trayEstiloAdicional = VALUES(trayEstiloAdicional)`,
       );
       if (result?.[0]?.affectedRows === 1) inserted += 1;
     }
@@ -218,6 +227,7 @@ async function ensureSchema(pool: mysql.Pool) {
       trayCategoriaPrincipal varchar(255) NOT NULL,
       traySubcategoria varchar(255),
       traySubsubcategoria varchar(255),
+      trayEstiloAdicional varchar(255),
       driveFolderId varchar(128),
       createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -286,6 +296,8 @@ async function ensureSchema(pool: mysql.Pool) {
     "ALTER TABLE products ADD COLUMN mockupUrlDarkWood text NULL",
     "ALTER TABLE products ADD COLUMN mockupUrlWhite text NULL",
     "ALTER TABLE products ADD COLUMN mockupUrlBlack text NULL",
+    // Estilo adicional pro export multi-categoria (Ambientes + Estilos + Temas).
+    "ALTER TABLE category_codes ADD COLUMN trayEstiloAdicional varchar(255) NULL",
   ]) {
     try {
       await pool.query(stmt);

@@ -48,6 +48,11 @@ export const categoryCodes = mysqlTable(
     trayCategoriaPrincipal: varchar("trayCategoriaPrincipal", { length: 255 }).notNull(),
     traySubcategoria: varchar("traySubcategoria", { length: 255 }),
     traySubsubcategoria: varchar("traySubsubcategoria", { length: 255 }),
+    // Subcategoria de Estilos a exportar como categoria ADICIONAL (além da
+    // principal Temas/Estilos/Ambientes/Artistas) — ex: "Clássicos" pra uma
+    // categoria cuja principal é Temas>Animais. Null quando a principal já é
+    // Estilos (já coberta) ou quando nenhum Estilo combina com a categoria.
+    trayEstiloAdicional: varchar("trayEstiloAdicional", { length: 255 }),
     driveFolderId: varchar("driveFolderId", { length: 128 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

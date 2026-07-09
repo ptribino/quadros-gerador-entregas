@@ -114,7 +114,7 @@ const CATEGORY_ROOM_AFFINITY: Record<string, readonly RoomType[]> = {
   FLO: ["living_room", "bedroom", "bathroom", "kitchen"],   // Flores e Plantas
 };
 
-function roomsForCategory(code3: string | null | undefined): readonly RoomType[] {
+export function roomsForCategory(code3: string | null | undefined): readonly RoomType[] {
   if (!code3) return UNIVERSAL_ROOMS;
   return CATEGORY_ROOM_AFFINITY[code3] ?? UNIVERSAL_ROOMS;
 }

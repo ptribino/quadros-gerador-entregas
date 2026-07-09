@@ -27,7 +27,7 @@ class GoogleVeoService {
 
   /**
    * Gera vídeo usando Google Veo via Generative Language API
-   * Model: veo-2.0-generate-001
+   * Model: veo-3.1-generate-preview
    */
   async generateVideo(request: VeoGenerationRequest): Promise<VeoGenerationResponse> {
     if (!this.apiKey) {
@@ -35,7 +35,7 @@ class GoogleVeoService {
     }
 
     try {
-      const model = 'veo-2.0-generate-001';
+      const model = 'veo-3.1-generate-preview';
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${this.apiKey}`;
 
       const instance: Record<string, unknown> = {

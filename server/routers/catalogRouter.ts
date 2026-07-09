@@ -6,6 +6,8 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { getValidAccessToken } from "../_core/oauth";
 import { googleDriveService, extractDriveFileId } from "../services/googleDriveService";
 import { analyzeImageForCatalog, buildSku, buildSlug } from "../services/catalogService";
+import { roomsForCategory } from "../services/catalogPipeline";
+import { buildAdditionalCategoryIds, detectNivel3 } from "../services/trayCategoryIds";
 import { getDb } from "../db";
 import { categoryCodes, products, productStatusEnum } from "../../drizzle/schema";
 import { ENV } from "../_core/env";
@@ -616,9 +618,18 @@ export const catalogRouter = router({
         { header: "SEO - Endereço do produto (URL)", key: "slug", width: 50 },
         { header: "Nome da categoria - nível 1", key: "catN1", width: 22 },
         { header: "Nome da categoria - nível 2", key: "catN2", width: 22 },
+        { header: "Nome da categoria - nível 3", key: "catN3", width: 22 },
         { header: "Exibir na loja", key: "naLoja", width: 12 },
         { header: "Mensagem adicional", key: "mensagemAdicional", width: 50 },
         { header: "Quando acabar o estoque", key: "quandoAcabarEstoque", width: 22 },
+        // Categorias adicionais (Ambientes + Estilos) — derivadas automaticamente
+        // via trayCategoryIds.ts, ver comentário no loop abaixo. Nomes exatos
+        // confirmados no dicionário de campos do painel Tray.
+        ...Array.from({ length: 10 }, (_, i) => ({
+          header: `Código categoria adicional ${i + 1} (ID)`,
+          key: `catAdic${i + 1}`,
+          width: 16,
+        })),
       ];
       ws.getRow(1).font = { bold: true };
 
@@ -626,6 +637,23 @@ export const catalogRouter = router({
         // SEO description = primeira frase do HTML (sem tags), max ~160 chars
         const plainText = (p.descricaoHtml ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         const seoDesc = plainText.slice(0, 160);
+
+        // Nível 3 (ex: Temas>Animais>Leões) via palavra-chave da IA — só
+        // ativa dentro de Temas>Animais (ver detectNivel3).
+        const nivel3 = detectNivel3(p.aiPalavrasChave, c?.traySubcategoria);
+
+        // Categorias ADICIONAIS: Ambientes (derivados dos cômodos elegíveis
+        // da categoria, mesmo mapeamento usado pra escolher a lifestyle) +
+        // Estilo (se a categoria tiver um `trayEstiloAdicional` definido).
+        // Corta o trabalho manual de subcategoria depois da importação.
+        const additionalCategoryIds = buildAdditionalCategoryIds({
+          eligibleRooms: roomsForCategory(c?.code3),
+          trayEstiloAdicional: c?.trayEstiloAdicional,
+        });
+        const catAdic: Record<string, number | null> = {};
+        for (let i = 0; i < 10; i++) {
+          catAdic[`catAdic${i + 1}`] = additionalCategoryIds[i] ?? null;
+        }
 
         ws.addRow({
           // null deixa célula em branco. String vazia "" quebra com
@@ -666,9 +694,11 @@ export const catalogRouter = router({
           slug: p.slugSeo ?? "",
           catN1: c?.trayCategoriaPrincipal ?? "Temas",
           catN2: c?.traySubcategoria ?? "",
+          catN3: nivel3 ?? "",
           naLoja: p.exibirNaLoja ? "Sim" : "Não",
           mensagemAdicional: TRAY_EXPORT_DEFAULTS.mensagemAdicional,
           quandoAcabarEstoque: TRAY_EXPORT_DEFAULTS.quandoAcabarEstoque,
+          ...catAdic,
         });
       }
 
