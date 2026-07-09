@@ -618,10 +618,16 @@ export const catalogRouter = router({
         { header: "SEO - Endereço do produto (URL)", key: "slug", width: 50 },
         { header: "Nome da categoria - nível 1", key: "catN1", width: 22 },
         { header: "Nome da categoria - nível 2", key: "catN2", width: 22 },
-        { header: "Nome da categoria - nível 3", key: "catN3", width: 22 },
         { header: "Exibir na loja", key: "naLoja", width: 12 },
         { header: "Mensagem adicional", key: "mensagemAdicional", width: 50 },
         { header: "Quando acabar o estoque", key: "quandoAcabarEstoque", width: 22 },
+        // A Tray casa esta planilha por POSIÇÃO, não por nome de cabeçalho
+        // (ver nota idêntica em exportTrayVariations mais abaixo — confirmado
+        // por importação real: inserir coluna no meio quebrou "Quando acabar
+        // o estoque" pra "Valor inválido" em 100% das linhas, mesmo com o
+        // texto certo, porque as colunas depois dela foram deslocadas). Toda
+        // coluna nova PRECISA ir no fim — nunca entre colunas já validadas.
+        { header: "Nome da categoria - nível 3", key: "catN3", width: 22 },
         // Categorias adicionais (Ambientes + Estilos) — derivadas automaticamente
         // via trayCategoryIds.ts, ver comentário no loop abaixo. Nomes exatos
         // confirmados no dicionário de campos do painel Tray.
