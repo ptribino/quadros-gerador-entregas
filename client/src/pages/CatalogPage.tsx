@@ -888,25 +888,34 @@ export default function CatalogPage() {
                   e.target.value = "";
                 }}
               />
-              <Select
-                value={orientationMode}
-                onValueChange={(v) => setOrientationMode(v as OrientationMode)}
-              >
-                <SelectTrigger
-                  id="orientation-mode"
-                  className={`${FIELD_INPUT_CLASS} w-44`}
-                  title="Ambos: os 8 tamanhos saem em Retrato e Paisagem (16 variações). Somente retrato/paisagem: todos os 8 tamanhos só naquela orientação — use quando a arte não pode ser reenquadrada na outra."
+              <div className="flex items-center gap-1.5">
+                <Label
+                  htmlFor="orientation-mode"
+                  className="whitespace-nowrap text-[12px] font-semibold text-[#8A8680]"
+                  title="Controla a orientação usada só quando você clica em 'Gerar variações' no menu Exportar"
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ORIENTATION_MODE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  Orientação (variações):
+                </Label>
+                <Select
+                  value={orientationMode}
+                  onValueChange={(v) => setOrientationMode(v as OrientationMode)}
+                >
+                  <SelectTrigger
+                    id="orientation-mode"
+                    className={`${FIELD_INPUT_CLASS} w-44`}
+                    title="Usado só pelo 'Gerar variações' (menu Exportar). Ambos: os 8 tamanhos saem em Retrato e Paisagem (16 variações). Somente retrato/paisagem: todos os 8 tamanhos só naquela orientação — use quando a arte não pode ser reenquadrada na outra."
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ORIENTATION_MODE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 variant="link"
                 className="px-1 text-[13px] font-semibold text-[#4338CA]"
