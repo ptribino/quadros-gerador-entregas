@@ -870,12 +870,6 @@ export default function CatalogPage() {
                   >
                     Exportar Tray
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={exportTrayVariationsMutation.isPending}
-                    onClick={() => trayVariationsInputRef.current?.click()}
-                  >
-                    Gerar variações
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               <input
@@ -888,13 +882,15 @@ export default function CatalogPage() {
                   e.target.value = "";
                 }}
               />
+
+              <div className="h-6 w-px bg-[#E9E7E2]" />
+
               <div className="flex items-center gap-1.5">
                 <Label
                   htmlFor="orientation-mode"
                   className="whitespace-nowrap text-[12px] font-semibold text-[#8A8680]"
-                  title="Controla a orientação usada só quando você clica em 'Gerar variações' no menu Exportar"
                 >
-                  Orientação (variações):
+                  Orientação:
                 </Label>
                 <Select
                   value={orientationMode}
@@ -903,7 +899,7 @@ export default function CatalogPage() {
                   <SelectTrigger
                     id="orientation-mode"
                     className={`${FIELD_INPUT_CLASS} w-44`}
-                    title="Usado só pelo 'Gerar variações' (menu Exportar). Ambos: os 8 tamanhos saem em Retrato e Paisagem (16 variações). Somente retrato/paisagem: todos os 8 tamanhos só naquela orientação — use quando a arte não pode ser reenquadrada na outra."
+                    title="Ambos: os 8 tamanhos saem em Retrato e Paisagem (16 variações). Somente retrato/paisagem: todos os 8 tamanhos só naquela orientação — use quando a arte não pode ser reenquadrada na outra."
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -916,6 +912,15 @@ export default function CatalogPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <Button
+                variant="outline"
+                className={GHOST_BTN_CLASS}
+                disabled={exportTrayVariationsMutation.isPending}
+                onClick={() => trayVariationsInputRef.current?.click()}
+                title="Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida) pra gerar as variações na orientação escolhida acima."
+              >
+                {exportTrayVariationsMutation.isPending ? "..." : "Gerar variações"}
+              </Button>
               <Button
                 variant="link"
                 className="px-1 text-[13px] font-semibold text-[#4338CA]"
