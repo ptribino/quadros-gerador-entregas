@@ -2,10 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -15,6 +13,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 
@@ -110,6 +115,57 @@ const GEN_RANK: Record<GenFilter, number> = {
   generated: 4,
 };
 
+// ---------- Design tokens (redesign "Curadoria de Catálogo" — handoff 2026-07-10) ----------
+// Escopo desta tela apenas — não mexe no tema global (client/src/index.css), que é
+// compartilhado com Home.tsx. Ver detalhes no plano de implementação.
+
+const FONT_SANS: React.CSSProperties = { fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" };
+const FONT_MONO: React.CSSProperties = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" };
+
+const FIELD_LABEL_CLASS =
+  "mb-[7px] block text-[11.5px] font-bold uppercase tracking-[0.02em] text-[#8A8680]";
+const FIELD_INPUT_CLASS =
+  "h-auto w-full rounded-[7px] border-[#E2E0DB] bg-white px-[11px] py-[9px] text-[13.5px] text-[#1C1B1A] shadow-none focus-visible:border-[#4338CA] focus-visible:ring-[#4338CA]/30";
+const GHOST_BTN_CLASS =
+  "rounded-[7px] border border-[#E2E0DB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#57534E] hover:bg-[#F7F6F4] disabled:bg-[#F1F0EE] disabled:text-[#B4B0A8] disabled:opacity-100 disabled:border-[#E2E0DB]";
+
+/** Paleta rotativa pra miniatura quando o produto não tem imagem de origem (sourceDriveFileId). */
+const THUMB_FALLBACK_COLORS = ["#F3E8D8", "#E4E9F7", "#E9E4F7", "#DDEFE7", "#F7E4E4"];
+
+type StatusKey = Exclude<StatusFilter, "all">;
+const STATUS_STYLE: Record<StatusKey, { dot: string; badgeBg: string; badgeText: string }> = {
+  suggested: { dot: "#A8A29E", badgeBg: "#F1F0EE", badgeText: "#57534E" },
+  approved: { dot: "#22C55E", badgeBg: "#DCFCE7", badgeText: "#15803D" },
+  generating: { dot: "#3B82F6", badgeBg: "#DBEAFE", badgeText: "#1D4ED8" },
+  generated: { dot: "#6366F1", badgeBg: "#EEF2FF", badgeText: "#4338CA" },
+  exported: { dot: "#A8A29E", badgeBg: "#F1F0EE", badgeText: "#57534E" },
+  rejected: { dot: "#EF4444", badgeBg: "#FEE2E2", badgeText: "#B91C1C" },
+  error: { dot: "#F59E0B", badgeBg: "#FEF3C7", badgeText: "#B45309" },
+};
+
+const INSTRUCTION_STEPS: React.ReactNode[] = [
+  <>Marque os produtos com a caixa de seleção.</>,
+  <>
+    Clique em <strong>Aprovar</strong>.
+  </>,
+  <>
+    Com os mesmos produtos ainda marcados, clique em <strong>Gerar imagens</strong> — o sistema
+    gera 3 imagens por produto (~1,5 min cada) e salva na sua pasta do Drive.
+  </>,
+  <>
+    Quando a coluna <strong>Geração</strong> mostrar{" "}
+    <strong className="text-emerald-600">✅ pronto</strong>, clique em{" "}
+    <strong>Exportar Tray</strong> e importe na sua loja.
+  </>,
+  <>
+    Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use{" "}
+    <strong>Gerar variações</strong> — devolve um XLS com as variações por produto (Tamanho ×
+    Orientação) pronto pra importar; ajuste <strong>Orientação</strong> pra "Somente
+    retrato"/"Somente paisagem" se a arte não puder ser reenquadrada na outra orientação. Quando
+    as variações já estiverem na loja, clique <strong>Marcar como cadastrado</strong>.
+  </>,
+];
+
 export default function CatalogPage() {
   const { user, loading: authLoading } = useAuth();
   const [categoryId, setCategoryId] = useState<string>("");
@@ -120,7 +176,7 @@ export default function CatalogPage() {
   const [count, setCount] = useState<number>(15);
   const [allItems, setAllItems] = useState<boolean>(false);
   const [previewOpen, setPreviewOpen] = useState<boolean>(false);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("suggested");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("generated");
   const [genFilter, setGenFilter] = useState<GenFilter>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [generatedFrom, setGeneratedFrom] = useState<string>("");
@@ -478,230 +534,260 @@ export default function CatalogPage() {
     );
   }
 
+  const exportPayload = () =>
+    selectedIds.size > 0
+      ? { productIds: Array.from(selectedIds) }
+      : { status: statusFilter === "all" ? undefined : (statusFilter as any) };
+
   return (
-    <div className="container mx-auto max-w-7xl space-y-6 p-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Curadoria de Catálogo</h1>
-          <p className="text-sm text-muted-foreground">
-            Passo 1: gerar sugestões a partir do banco de imagens no Drive.
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => (window.location.href = "/")}>
-          ← Geração manual
-        </Button>
-      </header>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Gerar sugestões por categoria</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_110px_auto]">
-          <div className="space-y-1">
-            <Label>Categoria</Label>
-            <Select value={categoryId} onValueChange={handleSelectCategory}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione..." />
-              </SelectTrigger>
-              <SelectContent>
-                {categoriesQuery.data?.map((cat) => {
-                  const folder = folderByName.get(cat.id);
-                  return (
-                    <SelectItem key={cat.id} value={String(cat.id)}>
-                      {cat.code3} — {cat.displayName} {folder ? "✓" : "(sem pasta)"}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>Subpasta (opcional)</Label>
-            <Select
-              value={subFolderId}
-              onValueChange={handleSelectSubFolder}
-              disabled={!categoryRootFolderId}
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={
-                    !categoryId
-                      ? "Selecione uma categoria primeiro"
-                      : subFoldersQuery.isLoading
-                        ? "Carregando..."
-                        : "Todas as subpastas"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SUBFOLDER_ALL}>Todas as subpastas</SelectItem>
-                {subFoldersQuery.data?.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>
-                    {f.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>Folder ID (auto-preenchido)</Label>
-            <Input
-              value={folderId}
-              onChange={(e) => {
-                setFolderId(e.target.value);
-                // Edição manual do ID invalida a escolha de subpasta (deixa de bater com o valor).
-                setSubFolderId(SUBFOLDER_ALL);
-              }}
-              placeholder="ID da pasta no Drive"
-            />
-            <Input
-              value={folderLinkInput}
-              onChange={(e) => handleFolderLinkChange(e.target.value)}
-              placeholder="Ou cole o link de uma pasta do Google Drive"
-              className={`text-xs ${folderLinkError ? "border-destructive focus-visible:ring-destructive" : ""}`}
-              title="Pra pastas que ainda não estão mapeadas a nenhuma categoria — cola o link e o ID é extraído automaticamente"
-            />
-            {folderLinkError && (
-              <p className="text-xs text-destructive">{folderLinkError}</p>
-            )}
-            <Button
-              type="button"
-              variant="link"
-              size="sm"
-              className="h-auto p-0 text-xs"
-              disabled={!folderId}
-              onClick={() => setPreviewOpen(true)}
-            >
-              Ver imagens desta pasta
-            </Button>
-          </div>
-          <div className="space-y-1">
-            <Label>Quantidade</Label>
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={count}
-              disabled={allItems}
-              onChange={(e) => setCount(Math.max(1, Math.min(50, Number(e.target.value) || 15)))}
-            />
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Checkbox
-                checked={allItems}
-                onCheckedChange={(v) => setAllItems(v === true)}
-                className="border-2 border-foreground/40 data-[state=checked]:border-primary"
-              />
-              Todos os itens da pasta
-            </label>
-          </div>
-          <div className="flex items-end">
-            <Button
-              disabled={!categoryId || !folderId || suggestMutation.isPending}
-              onClick={() =>
-                suggestMutation.mutate({
-                  folderId,
-                  categoryCodeId: Number(categoryId),
-                  count,
-                  all: allItems,
-                })
-              }
-            >
-              {suggestMutation.isPending ? "Analisando..." : "Gerar sugestões"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Imagens da pasta</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto">
-            {folderPreviewQuery.isLoading && (
-              <p className="py-8 text-center text-sm text-muted-foreground">Carregando imagens...</p>
-            )}
-            {folderPreviewQuery.isError && (
-              <p className="py-8 text-center text-sm text-destructive">
-                Erro ao carregar imagens da pasta.
-              </p>
-            )}
-            {folderPreviewQuery.data && folderPreviewQuery.data.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Nenhuma imagem encontrada nesta pasta (nem nas subpastas).
-              </p>
-            )}
-            {folderPreviewQuery.data && folderPreviewQuery.data.length > 0 && (
-              <>
-                <p className="mb-2 text-xs text-muted-foreground">
-                  Mostrando {folderPreviewQuery.data.length} imagem(ns)
-                  {folderPreviewQuery.data.length >= 60 && " (limite da pré-visualização — pode haver mais)"}.
-                </p>
-                <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
-                  {folderPreviewQuery.data.map((f) => (
-                    <div key={f.id} className="space-y-1">
-                      <div className="aspect-square overflow-hidden rounded-md border bg-muted">
-                        <DriveThumb fileId={f.id} name={f.name} />
-                      </div>
-                      <p className="truncate text-[10px] text-muted-foreground" title={f.name}>
-                        {f.name}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Card>
-        <CardHeader className="space-y-3 pb-3">
-          <div className="min-w-0 space-y-1.5">
-            <CardTitle className="text-base">Sugestões</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {visibleProducts.length} produtos
-              {productsQuery.data && visibleProducts.length !== productsQuery.data.length && (
-                <> de {productsQuery.data.length}</>
-              )}{" "}
-              · {selectedIds.size} selecionado(s)
+    <div className="min-h-screen bg-[#EEECE7] py-8" style={FONT_SANS}>
+      <div className="mx-auto max-w-[1360px] overflow-hidden rounded-[14px] border border-black/[.08] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06)]">
+        {/* Header */}
+        <header className="flex items-start justify-between border-b border-[#EEEDEA] px-8 py-[26px]">
+          <div>
+            <h1 className="m-0 text-[22px] font-extrabold tracking-[-0.01em] text-[#1C1B1A]">
+              Curadoria de Catálogo
+            </h1>
+            <p className="mt-1.5 text-[13.5px] text-[#8A8680]">
+              Passo 1: gerar sugestões a partir do banco de imagens no Drive.
             </p>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {STATUS_ORDER.filter((s) => statusCounts[s]).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStatusFilter(statusFilter === s ? "all" : s)}
-                  className={`rounded-full px-2 py-0.5 text-[11px] ring-1 transition-colors ${
-                    statusFilter === s
-                      ? "bg-foreground text-background ring-foreground"
-                      : "bg-muted/50 text-muted-foreground ring-border hover:bg-muted"
-                  }`}
-                  title={`Filtrar por ${STATUS_LABELS[s]}`}
+          </div>
+          <Button
+            variant="outline"
+            className={GHOST_BTN_CLASS}
+            onClick={() => (window.location.href = "/")}
+          >
+            ← Geração manual
+          </Button>
+        </header>
+
+        {/* Card "Gerar sugestões por categoria" */}
+        <div className="px-8 pt-6">
+          <div className="rounded-[10px] border border-[#EEEDEA] bg-[#FCFCFB] p-[22px_24px]">
+            <h2 className="m-0 mb-[18px] text-[14.5px] font-extrabold text-[#1C1B1A]">
+              Gerar sugestões por categoria
+            </h2>
+            <div className="grid gap-[22px] sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.4fr_1fr]">
+              <div>
+                <Label className={FIELD_LABEL_CLASS}>Categoria</Label>
+                <Select value={categoryId} onValueChange={handleSelectCategory}>
+                  <SelectTrigger className={FIELD_INPUT_CLASS}>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoriesQuery.data?.map((cat) => {
+                      const folder = folderByName.get(cat.id);
+                      return (
+                        <SelectItem key={cat.id} value={String(cat.id)}>
+                          {cat.code3} — {cat.displayName} {folder ? "✓" : "(sem pasta)"}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className={FIELD_LABEL_CLASS}>Subpasta (opcional)</Label>
+                <Select
+                  value={subFolderId}
+                  onValueChange={handleSelectSubFolder}
+                  disabled={!categoryRootFolderId}
                 >
-                  {STATUS_LABELS[s]}: {statusCounts[s]}
-                </button>
-              ))}
+                  <SelectTrigger className={FIELD_INPUT_CLASS}>
+                    <SelectValue
+                      placeholder={
+                        !categoryId
+                          ? "Selecione uma categoria primeiro"
+                          : subFoldersQuery.isLoading
+                            ? "Carregando..."
+                            : "Todas as subpastas"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SUBFOLDER_ALL}>Todas as subpastas</SelectItem>
+                    {subFoldersQuery.data?.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className={FIELD_LABEL_CLASS}>Folder ID (auto-preenchido)</Label>
+                <Input
+                  value={folderId}
+                  onChange={(e) => {
+                    setFolderId(e.target.value);
+                    // Edição manual do ID invalida a escolha de subpasta (deixa de bater com o valor).
+                    setSubFolderId(SUBFOLDER_ALL);
+                  }}
+                  placeholder="ID da pasta no Drive"
+                  className={`${FIELD_INPUT_CLASS} mb-2`}
+                />
+                <Input
+                  value={folderLinkInput}
+                  onChange={(e) => handleFolderLinkChange(e.target.value)}
+                  placeholder="Ou cole o link de uma pasta do Google Drive"
+                  className={`${FIELD_INPUT_CLASS} text-xs ${folderLinkError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                  title="Pra pastas que ainda não estão mapeadas a nenhuma categoria — cola o link e o ID é extraído automaticamente"
+                />
+                {folderLinkError && (
+                  <p className="mt-1 text-xs text-destructive">{folderLinkError}</p>
+                )}
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="mt-2 h-auto p-0 text-[12.5px] text-[#4338CA]"
+                  disabled={!folderId}
+                  onClick={() => setPreviewOpen(true)}
+                >
+                  Ver imagens desta pasta
+                </Button>
+              </div>
+              <div>
+                <Label className={FIELD_LABEL_CLASS}>Quantidade</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={count}
+                  disabled={allItems}
+                  onChange={(e) => setCount(Math.max(1, Math.min(50, Number(e.target.value) || 15)))}
+                  className={FIELD_INPUT_CLASS}
+                />
+                <label className="mt-[11px] flex items-center gap-[7px] text-[12.5px] text-[#57534E]">
+                  <Checkbox
+                    checked={allItems}
+                    onCheckedChange={(v) => setAllItems(v === true)}
+                    className="border-2 border-[#8A8680] data-[state=checked]:border-[#4338CA] data-[state=checked]:bg-[#4338CA]"
+                  />
+                  Todos os itens da pasta
+                </label>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end">
+              <Button
+                className="rounded-[8px] bg-[#4338CA] px-6 py-[11px] text-[13.5px] font-bold text-white hover:bg-[#3730A3]"
+                disabled={!categoryId || !folderId || suggestMutation.isPending}
+                onClick={() =>
+                  suggestMutation.mutate({
+                    folderId,
+                    categoryCodeId: Number(categoryId),
+                    count,
+                    all: allItems,
+                  })
+                }
+              >
+                {suggestMutation.isPending ? "Analisando..." : "Gerar sugestões"}
+              </Button>
             </div>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            {/* Seleção */}
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={selectAll}>
-                Selecionar todos
-              </Button>
-              <Button size="sm" variant="outline" onClick={clearSelection}>
-                Limpar
-              </Button>
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Imagens da pasta</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto">
+              {folderPreviewQuery.isLoading && (
+                <p className="py-8 text-center text-sm text-muted-foreground">Carregando imagens...</p>
+              )}
+              {folderPreviewQuery.isError && (
+                <p className="py-8 text-center text-sm text-destructive">
+                  Erro ao carregar imagens da pasta.
+                </p>
+              )}
+              {folderPreviewQuery.data && folderPreviewQuery.data.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  Nenhuma imagem encontrada nesta pasta (nem nas subpastas).
+                </p>
+              )}
+              {folderPreviewQuery.data && folderPreviewQuery.data.length > 0 && (
+                <>
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Mostrando {folderPreviewQuery.data.length} imagem(ns)
+                    {folderPreviewQuery.data.length >= 60 && " (limite da pré-visualização — pode haver mais)"}.
+                  </p>
+                  <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
+                    {folderPreviewQuery.data.map((f) => (
+                      <div key={f.id} className="space-y-1">
+                        <div className="aspect-square overflow-hidden rounded-md border bg-muted">
+                          <DriveThumb fileId={f.id} name={f.name} />
+                        </div>
+                        <p className="truncate text-[10px] text-muted-foreground" title={f.name}>
+                          {f.name}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Card "Sugestões" */}
+        <div className="px-8 pb-8 pt-7">
+          <div className="rounded-[10px] border border-[#EEEDEA] bg-white">
+            <div className="flex items-baseline justify-between px-6 pb-4 pt-5">
+              <h2 className="m-0 text-[14.5px] font-extrabold text-[#1C1B1A]">Sugestões</h2>
+              <span className="text-[12px] text-[#8A8680]" style={FONT_MONO}>
+                {visibleProducts.length} produtos
+                {productsQuery.data && visibleProducts.length !== productsQuery.data.length && (
+                  <> de {productsQuery.data.length}</>
+                )}{" "}
+                · {selectedIds.size} selecionado(s)
+              </span>
             </div>
 
-            <div className="h-6 w-px bg-border" />
+            {/* Chips de status */}
+            <div className="flex flex-wrap gap-2 px-6 pb-[18px]">
+              {STATUS_ORDER.filter((s) => statusCounts[s]).map((s) => {
+                const active = statusFilter === s;
+                const style = STATUS_STYLE[s];
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setStatusFilter(active ? "all" : s)}
+                    className={`flex items-center gap-1.5 rounded-full border px-[13px] py-[7px] text-[12.5px] font-bold transition-colors ${
+                      active
+                        ? "border-[#1C1B1A] bg-[#1C1B1A] text-white"
+                        : "border-[#E2E0DB] bg-white text-[#57534E] hover:bg-[#F7F6F4]"
+                    }`}
+                    title={`Filtrar por ${STATUS_LABELS[s]}`}
+                  >
+                    <span
+                      className="h-[7px] w-[7px] rounded-full"
+                      style={{ backgroundColor: style.dot }}
+                    />
+                    {STATUS_LABELS[s]}: {statusCounts[s]}
+                  </button>
+                );
+              })}
+            </div>
 
-            {/* Aprovação/rejeição da curadoria */}
-            <div className="flex items-center gap-2">
+            <div className="mx-6 border-t border-[#EEEDEA]" />
+
+            {/* Toolbar de ações */}
+            <div className="flex flex-wrap items-center gap-[14px] px-6 py-4">
+              <div className="flex items-center gap-2.5">
+                <Button variant="outline" className={GHOST_BTN_CLASS} onClick={selectAll}>
+                  Selecionar todos
+                </Button>
+                <Button variant="outline" className={GHOST_BTN_CLASS} onClick={clearSelection}>
+                  Limpar
+                </Button>
+              </div>
+
+              <div className="h-6 w-px bg-[#E9E7E2]" />
+
               <Button
-                size="sm"
+                className="rounded-[7px] bg-[#4338CA] px-4 py-2 text-[13px] font-bold text-white hover:bg-[#3730A3] disabled:bg-[#F1F0EE] disabled:text-[#B4B0A8] disabled:opacity-100"
                 disabled={selectedIds.size === 0 || updateStatusMutation.isPending}
                 onClick={() =>
                   updateStatusMutation.mutate({
@@ -713,8 +799,8 @@ export default function CatalogPage() {
                 Aprovar
               </Button>
               <Button
-                size="sm"
-                variant="destructive"
+                variant="outline"
+                className="rounded-[7px] border border-[#EF4444] px-4 py-2 text-[13px] font-bold text-[#B91C1C] hover:bg-[#FEE2E2] disabled:border-[#E2E0DB] disabled:bg-[#F1F0EE] disabled:text-[#B4B0A8] disabled:opacity-100"
                 disabled={selectedIds.size === 0 || updateStatusMutation.isPending}
                 onClick={() =>
                   updateStatusMutation.mutate({
@@ -725,14 +811,14 @@ export default function CatalogPage() {
               >
                 Rejeitar
               </Button>
-            </div>
 
-            <div className="h-6 w-px bg-border" />
+              <div className="h-6 w-px bg-[#E9E7E2]" />
 
-            {/* Geração de imagens */}
-            <div className="flex items-center gap-2">
               <Select value={styleOverride} onValueChange={(v) => setStyleOverride(v as StyleOverride)}>
-                <SelectTrigger className="w-56" title="Estilo de ambiente usado nas imagens lifestyle">
+                <SelectTrigger
+                  className={`${FIELD_INPUT_CLASS} w-56`}
+                  title="Estilo de ambiente usado nas imagens lifestyle"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -744,8 +830,8 @@ export default function CatalogPage() {
                 </SelectContent>
               </Select>
               <Button
-                size="sm"
-                variant="secondary"
+                variant="outline"
+                className={GHOST_BTN_CLASS}
                 disabled={selectedIds.size === 0 || enqueueMutation.isPending}
                 onClick={() =>
                   enqueueMutation.mutate({
@@ -757,78 +843,58 @@ export default function CatalogPage() {
               >
                 {enqueueMutation.isPending ? "..." : "Gerar imagens"}
               </Button>
-            </div>
-          </div>
 
-          {/* Exportação — fluxo Tray */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Exportação:</span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={exportMutation.isPending}
-              onClick={() =>
-                exportMutation.mutate(
-                  selectedIds.size > 0
-                    ? { productIds: Array.from(selectedIds) }
-                    : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
-                )
-              }
-              title="Planilha interna com metadados da curadoria (descricaoHtml, potencial, palavras-chave)"
-            >
-              {exportMutation.isPending ? "..." : "Exportar curadoria"}
-            </Button>
-            <Button
-              size="sm"
-              variant="default"
-              disabled={exportTrayMutation.isPending}
-              onClick={() =>
-                exportTrayMutation.mutate(
-                  selectedIds.size > 0
-                    ? { productIds: Array.from(selectedIds) }
-                    : { status: statusFilter === "all" ? undefined : (statusFilter as any) },
-                )
-              }
-              title="Planilha pronta para importar na Tray (formato 30 colunas)"
-            >
-              {exportTrayMutation.isPending ? "..." : "Exportar Tray"}
-            </Button>
-            <input
-              ref={trayVariationsInputRef}
-              type="file"
-              accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              className="hidden"
-              onChange={(e) => {
-                handleVariationsFilePick(e.target.files?.[0]);
-                e.target.value = "";
-              }}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={exportTrayVariationsMutation.isPending}
-              onClick={() => trayVariationsInputRef.current?.click()}
-              title={
-                orientationMode === "somente_paisagem"
-                  ? "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 8 variações por produto: 1 por tamanho, todas em Paisagem."
-                  : orientationMode === "somente_retrato"
-                    ? "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 8 variações por produto: 1 por tamanho, todas em Retrato."
-                    : "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 16 variações por produto: os 8 tamanhos em Retrato e Paisagem."
-              }
-            >
-              {exportTrayVariationsMutation.isPending ? "..." : "Gerar variações"}
-            </Button>
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor="orientation-mode" className="text-xs text-muted-foreground">
-                Orientação
-              </Label>
+              <div className="h-6 w-px bg-[#E9E7E2]" />
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-[7px] bg-[#1C1B1A] px-4 py-[9px] text-[13px] font-bold text-white hover:bg-[#1C1B1A]/90"
+                  >
+                    Exportar ▾
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[190px]">
+                  <DropdownMenuItem
+                    disabled={exportMutation.isPending}
+                    onClick={() => exportMutation.mutate(exportPayload())}
+                    title="Planilha interna com metadados da curadoria (descricaoHtml, potencial, palavras-chave)"
+                  >
+                    Exportar curadoria
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={exportTrayMutation.isPending}
+                    onClick={() => exportTrayMutation.mutate(exportPayload())}
+                    title="Planilha pronta para importar na Tray (formato 30 colunas)"
+                  >
+                    Exportar Tray
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    disabled={exportTrayVariationsMutation.isPending}
+                    onClick={() => trayVariationsInputRef.current?.click()}
+                  >
+                    Gerar variações
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <input
+                ref={trayVariationsInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(e) => {
+                  handleVariationsFilePick(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
               <Select
                 value={orientationMode}
                 onValueChange={(v) => setOrientationMode(v as OrientationMode)}
               >
                 <SelectTrigger
                   id="orientation-mode"
-                  className="h-8 w-44 text-xs"
+                  className={`${FIELD_INPUT_CLASS} w-44`}
                   title="Ambos: os 8 tamanhos saem em Retrato e Paisagem (16 variações). Somente retrato/paisagem: todos os 8 tamanhos só naquela orientação — use quando a arte não pode ser reenquadrada na outra."
                 >
                   <SelectValue />
@@ -841,264 +907,305 @@ export default function CatalogPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-emerald-600 text-emerald-700 hover:bg-emerald-50"
-              disabled={selectedIds.size === 0 || updateStatusMutation.isPending}
-              onClick={() =>
-                updateStatusMutation.mutate({
-                  productIds: Array.from(selectedIds),
-                  status: "exported",
-                })
-              }
-              title="Marca os selecionados como já importados na Tray com as variações cadastradas na loja"
-            >
-              {updateStatusMutation.isPending ? "..." : "Marcar como cadastrado"}
-            </Button>
-          </div>
-
-          <div className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900 ring-1 ring-blue-100">
-            <span className="font-medium">Como funciona:</span>{" "}
-            (1) marque os produtos com <kbd className="rounded bg-white px-1 py-0.5 ring-1 ring-blue-200">checkbox</kbd>,{" "}
-            (2) clique <strong>Aprovar</strong>,{" "}
-            (3) com os mesmos produtos ainda marcados, clique <strong>Gerar imagens</strong> — o sistema gera 3 imagens por produto (~1.5 min cada) e salva na sua pasta do Drive.{" "}
-            (4) Quando a coluna GERAÇÃO mostrar <strong className="text-emerald-600">✅ pronto</strong>, clique <strong>Exportar Tray</strong> e importe na sua loja.{" "}
-            (5) Depois da importação, exporte do painel da Tray o CSV de produtos (já com os IDs) e use <strong>Gerar variações</strong> — devolve um XLS com as variações por produto (Tamanho × Orientação) pronto pra importar; ajuste <strong>Orientação</strong> pra "Somente retrato"/"Somente paisagem" se a arte não puder ser reenquadrada na outra orientação.{" "}
-            Quando as variações já estiverem na loja, clique <strong>Marcar como cadastrado</strong>.
-          </div>
-
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="catalog-search" className="text-xs text-muted-foreground">
-                Pesquisar
-              </Label>
-              <Input
-                id="catalog-search"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por SKU, nome, marca..."
-                className="w-56"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="catalog-status-filter" className="text-xs text-muted-foreground">
-                Status
-              </Label>
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-                <SelectTrigger id="catalog-status-filter" className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="suggested">Sugeridos</SelectItem>
-                  <SelectItem value="approved">Aprovados</SelectItem>
-                  <SelectItem value="generating">Gerando</SelectItem>
-                  <SelectItem value="generated">Gerados</SelectItem>
-                  <SelectItem value="exported">Cadastrado na Tray</SelectItem>
-                  <SelectItem value="rejected">Rejeitados</SelectItem>
-                  <SelectItem value="error">Com erro</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="catalog-gen-filter" className="text-xs text-muted-foreground">
-                Geração
-              </Label>
-              <Select value={genFilter} onValueChange={(v) => setGenFilter(v as GenFilter)}>
-                <SelectTrigger id="catalog-gen-filter" className="w-44" title="Filtrar por status de geração de imagens">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Geração: todos</SelectItem>
-                  <SelectItem value="generated">✅ pronto</SelectItem>
-                  <SelectItem value="in_progress">⚙️ gerando</SelectItem>
-                  <SelectItem value="queued">⏳ na fila</SelectItem>
-                  <SelectItem value="failed">❌ falha</SelectItem>
-                  <SelectItem value="none">Não gerado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="catalog-generated-from" className="text-xs text-muted-foreground">
-                Gerado de
-              </Label>
-              <Input
-                id="catalog-generated-from"
-                type="date"
-                value={generatedFrom}
-                onChange={(e) => setGeneratedFrom(e.target.value)}
-                className="w-40"
-                title="Filtrar por data de geração — a partir de"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label htmlFor="catalog-generated-to" className="text-xs text-muted-foreground">
-                até
-              </Label>
-              <Input
-                id="catalog-generated-to"
-                type="date"
-                value={generatedTo}
-                onChange={(e) => setGeneratedTo(e.target.value)}
-                className="w-40"
-                title="Filtrar por data de geração — até"
-              />
-            </div>
-            {(generatedFrom || generatedTo) && (
               <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setGeneratedFrom("");
-                  setGeneratedTo("");
-                }}
+                variant="link"
+                className="px-1 text-[13px] font-semibold text-[#4338CA]"
+                disabled={selectedIds.size === 0 || updateStatusMutation.isPending}
+                onClick={() =>
+                  updateStatusMutation.mutate({
+                    productIds: Array.from(selectedIds),
+                    status: "exported",
+                  })
+                }
+                title="Marca os selecionados como já importados na Tray com as variações cadastradas na loja"
               >
-                Limpar datas
+                {updateStatusMutation.isPending ? "..." : "Marcar como cadastrado"}
               </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="overflow-x-auto p-0">
-          {generationStatusQuery.data && (generationStatusQuery.data.queued + generationStatusQuery.data.running) > 0 && (
-            (() => {
-              const s = generationStatusQuery.data;
-              const total = s.queued + s.running + s.done + s.errored;
-              const pct = total > 0 ? Math.round(((s.done + s.errored) / total) * 100) : 0;
-              const remaining = s.queued + s.running;
-              const minutesLeft = Math.max(1, Math.ceil(remaining * 1.5));
-              return (
-                <div className="border-b bg-blue-50 px-4 py-2 text-xs">
-                  <div className="flex items-center justify-between text-blue-900">
-                    <span>
-                      🎨 <span className="font-medium">Geração em andamento:</span>{" "}
-                      {s.done}/{total} prontos ({pct}%) · ~{minutesLeft} min restantes
-                    </span>
-                    {s.errored > 0 && (
-                      <span className="text-destructive">{s.errored} com erro</span>
-                    )}
-                  </div>
-                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
-                    <div
-                      className="h-full bg-blue-500 transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })()
-          )}
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/50 text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="w-10 px-3 py-2"></th>
-                <th className="w-14 px-3 py-2"></th>
-                <SortableTh label="SKU" sortKey="sku" current={sortKey} dir={sortDir} onClick={toggleSort} />
-                <SortableTh label="Nome" sortKey="nome" current={sortKey} dir={sortDir} onClick={toggleSort} />
-                <SortableTh label="Potencial" sortKey="potencial" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
-                <SortableTh label="Status" sortKey="status" current={sortKey} dir={sortDir} onClick={toggleSort} />
-                <SortableTh label="Geração" sortKey="geracao" current={sortKey} dir={sortDir} onClick={toggleSort} />
-                <th className="px-3 py-2 text-left">Origem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pagedProducts.map((p) => (
-                <tr key={p.id} className="border-b hover:bg-muted/20">
-                  <td className="px-3 py-2">
-                    <Checkbox
-                      checked={selectedIds.has(p.id)}
-                      onCheckedChange={() => toggleSelect(p.id)}
-                      className="size-5 border-2 border-foreground/40 data-[state=checked]:border-primary"
-                    />
-                  </td>
-                  <td className="px-3 py-2">
-                    {p.sourceDriveFileId ? (
-                      <div className="h-10 w-10 overflow-hidden rounded border bg-muted">
-                        <DriveThumb fileId={p.sourceDriveFileId} name={p.nome} />
-                      </div>
-                    ) : (
-                      <div className="h-10 w-10 rounded border bg-muted" />
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs">{p.sku}</td>
-                  <td className="px-3 py-2">{p.nome}</td>
-                  <td className="px-3 py-2 text-center">
-                    <Badge variant={(p.aiPotencialVenda ?? 0) >= 7 ? "default" : "secondary"}>
-                      {p.aiPotencialVenda ?? "—"}
-                    </Badge>
-                  </td>
-                  <td className="px-3 py-2">
-                    <Badge variant={statusVariant(p.status)}>{p.status}</Badge>
-                  </td>
-                  <td className="px-3 py-2 text-xs">
-                    {generationCellLabel(p)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {p.productDriveFolderUrl ? (
-                      <a
-                        className="text-xs text-primary underline"
-                        href={p.productDriveFolderUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Pasta
-                      </a>
-                    ) : p.sourceDriveFileUrl ? (
-                      <a
-                        className="text-xs text-primary underline"
-                        href={p.sourceDriveFileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Drive
-                      </a>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {productsQuery.data && visibleProducts.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
-                    Nenhuma sugestão neste filtro. Gere sugestões acima.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          {visibleProducts.length > PAGE_SIZE && (
-            <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground">
-              <span>
-                Mostrando {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, visibleProducts.length)} de{" "}
-                {visibleProducts.length}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  ← Anterior
-                </Button>
-                <span>
-                  Página {page} de {totalPages}
+            </div>
+
+            {/* Como funciona (colapsável) */}
+            <Collapsible className="mx-6 mb-[18px]">
+              <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-[8px] border border-[#E4E3FA] bg-[#F5F5FF] px-4 py-[11px] text-[13px] font-bold text-[#4338CA]">
+                <span>ℹ</span> Como funciona
+                <span className="ml-auto text-[11px] transition-transform group-data-[state=open]:rotate-180">
+                  ▾
                 </span>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="rounded-b-[8px] border border-t-0 border-[#E4E3FA] bg-[#FAFAFF] px-5 py-4">
+                <div className="flex flex-col gap-3">
+                  {INSTRUCTION_STEPS.map((step, i) => (
+                    <div key={i} className="flex gap-3">
+                      <span className="flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full bg-[#4338CA] text-[11.5px] font-bold text-white">
+                        {i + 1}
+                      </span>
+                      <p className="m-0 text-[13px] leading-[1.5] text-[#3A3A3A]">{step}</p>
+                    </div>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Linha de filtros */}
+            <div className="mx-6 mb-4 grid grid-cols-2 items-end gap-[14px] sm:grid-cols-3 lg:grid-cols-[1.6fr_1fr_1fr_1fr_1fr_auto]">
+              <div>
+                <Label htmlFor="catalog-search" className={FIELD_LABEL_CLASS}>
+                  Pesquisar
+                </Label>
+                <Input
+                  id="catalog-search"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar por SKU, nome, marca..."
+                  className={FIELD_INPUT_CLASS}
+                />
+              </div>
+              <div>
+                <Label htmlFor="catalog-status-filter" className={FIELD_LABEL_CLASS}>
+                  Status
+                </Label>
+                <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+                  <SelectTrigger id="catalog-status-filter" className={FIELD_INPUT_CLASS}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="suggested">Sugeridos</SelectItem>
+                    <SelectItem value="approved">Aprovados</SelectItem>
+                    <SelectItem value="generating">Gerando</SelectItem>
+                    <SelectItem value="generated">Gerados</SelectItem>
+                    <SelectItem value="exported">Cadastrado na Tray</SelectItem>
+                    <SelectItem value="rejected">Rejeitados</SelectItem>
+                    <SelectItem value="error">Com erro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="catalog-gen-filter" className={FIELD_LABEL_CLASS}>
+                  Geração
+                </Label>
+                <Select value={genFilter} onValueChange={(v) => setGenFilter(v as GenFilter)}>
+                  <SelectTrigger
+                    id="catalog-gen-filter"
+                    className={FIELD_INPUT_CLASS}
+                    title="Filtrar por status de geração de imagens"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Geração: todos</SelectItem>
+                    <SelectItem value="generated">✅ pronto</SelectItem>
+                    <SelectItem value="in_progress">⚙️ gerando</SelectItem>
+                    <SelectItem value="queued">⏳ na fila</SelectItem>
+                    <SelectItem value="failed">❌ falha</SelectItem>
+                    <SelectItem value="none">Não gerado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="catalog-generated-from" className={FIELD_LABEL_CLASS}>
+                  Gerado de
+                </Label>
+                <Input
+                  id="catalog-generated-from"
+                  type="date"
+                  value={generatedFrom}
+                  onChange={(e) => setGeneratedFrom(e.target.value)}
+                  className={FIELD_INPUT_CLASS}
+                  title="Filtrar por data de geração — a partir de"
+                />
+              </div>
+              <div>
+                <Label htmlFor="catalog-generated-to" className={FIELD_LABEL_CLASS}>
+                  até
+                </Label>
+                <Input
+                  id="catalog-generated-to"
+                  type="date"
+                  value={generatedTo}
+                  onChange={(e) => setGeneratedTo(e.target.value)}
+                  className={FIELD_INPUT_CLASS}
+                  title="Filtrar por data de geração — até"
+                />
+              </div>
+              {(generatedFrom || generatedTo) && (
                 <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  variant="ghost"
+                  className="whitespace-nowrap px-1 text-[12.5px] font-semibold text-[#4338CA]"
+                  onClick={() => {
+                    setGeneratedFrom("");
+                    setGeneratedTo("");
+                  }}
                 >
-                  Próxima →
+                  Limpar datas
                 </Button>
+              )}
+            </div>
+
+            {/* Barra de progresso de geração */}
+            {generationStatusQuery.data && (generationStatusQuery.data.queued + generationStatusQuery.data.running) > 0 && (
+              (() => {
+                const s = generationStatusQuery.data;
+                const total = s.queued + s.running + s.done + s.errored;
+                const pct = total > 0 ? Math.round(((s.done + s.errored) / total) * 100) : 0;
+                const remaining = s.queued + s.running;
+                const minutesLeft = Math.max(1, Math.ceil(remaining * 1.5));
+                return (
+                  <div className="mx-6 mb-3 flex items-center gap-3 rounded-[8px] bg-[#EEF2FF] px-4 py-3">
+                    <span className="text-[13px]">🎨</span>
+                    <span className="text-[12.5px] font-semibold text-[#3730A3]">
+                      Geração em andamento: {s.done}/{total} prontos ({pct}%) · ~{minutesLeft} min restantes
+                    </span>
+                    <div className="h-[6px] flex-1 overflow-hidden rounded-full bg-[#C7D2FE]">
+                      <div
+                        className="h-full rounded-full bg-[#4338CA] transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    {s.errored > 0 && (
+                      <span className="whitespace-nowrap text-[12.5px] font-bold text-[#B91C1C]">
+                        {s.errored} com erro
+                      </span>
+                    )}
+                  </div>
+                );
+              })()
+            )}
+
+            {/* Tabela de sugestões */}
+            <div className="overflow-x-auto">
+              <div className="min-w-[1100px]">
+                <div
+                  className="grid items-center gap-3 border-t border-b border-[#EEEDEA] bg-[#FAFAF9] px-6 py-2.5 text-[11px] font-bold uppercase tracking-[0.03em] text-[#8A8680]"
+                  style={{ gridTemplateColumns: "40px 56px 1fr 90px 130px 170px 70px" }}
+                >
+                  <div />
+                  <div />
+                  <SortableHeader label="Nome" sortKey="nome" current={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortableHeader label="Potencial" sortKey="potencial" current={sortKey} dir={sortDir} onClick={toggleSort} align="center" />
+                  <SortableHeader label="Status" sortKey="status" current={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <SortableHeader label="Geração" sortKey="geracao" current={sortKey} dir={sortDir} onClick={toggleSort} />
+                  <div>Origem</div>
+                </div>
+
+                {pagedProducts.map((p, idx) => {
+                  const statusStyle = STATUS_STYLE[p.status as StatusKey];
+                  return (
+                    <div
+                      key={p.id}
+                      className="grid items-center gap-3 border-b border-[#F3F2EF] px-6 py-3.5 hover:bg-[#FAFAF9]"
+                      style={{ gridTemplateColumns: "40px 56px 1fr 90px 130px 170px 70px" }}
+                    >
+                      <Checkbox
+                        checked={selectedIds.has(p.id)}
+                        onCheckedChange={() => toggleSelect(p.id)}
+                        className="size-4 border-2 border-[#8A8680] data-[state=checked]:border-[#4338CA] data-[state=checked]:bg-[#4338CA]"
+                      />
+                      {p.sourceDriveFileId ? (
+                        <div className="h-11 w-11 overflow-hidden rounded-[8px] border border-[#EEEDEA]">
+                          <DriveThumb fileId={p.sourceDriveFileId} name={p.nome} />
+                        </div>
+                      ) : (
+                        <div
+                          className="flex h-11 w-11 items-center justify-center rounded-[8px]"
+                          style={{ backgroundColor: THUMB_FALLBACK_COLORS[idx % THUMB_FALLBACK_COLORS.length] }}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                            <rect x="3" y="4" width="18" height="16" rx="2" stroke="#8A8680" strokeWidth="1.6" />
+                            <circle cx="8.5" cy="9.5" r="1.5" fill="#8A8680" />
+                            <path d="M4 17l5-5 4 4 3-3 4 4" stroke="#8A8680" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <div className="mb-0.5 truncate text-[11.5px] text-[#8A8680]" style={FONT_MONO}>
+                          {p.sku}
+                        </div>
+                        <div className="truncate text-[13.5px] font-semibold leading-[1.3] text-[#1C1B1A]">
+                          {p.nome}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="rounded-[6px] bg-[#EEF2FF] px-2.5 py-1 text-[12px] font-bold text-[#4338CA]">
+                          {p.aiPotencialVenda ?? "—"}
+                        </span>
+                      </div>
+                      <div>
+                        {statusStyle && (
+                          <span
+                            className="rounded-full px-2.5 py-1 text-[12px] font-bold"
+                            style={{ backgroundColor: statusStyle.badgeBg, color: statusStyle.badgeText }}
+                          >
+                            {STATUS_LABELS[p.status as StatusKey] ?? p.status}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs">{generationCellLabel(p)}</div>
+                      <div>
+                        {p.productDriveFolderUrl ? (
+                          <a
+                            className="text-[12.5px] font-semibold text-[#4338CA] hover:underline"
+                            href={p.productDriveFolderUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Pasta
+                          </a>
+                        ) : p.sourceDriveFileUrl ? (
+                          <a
+                            className="text-[12.5px] font-semibold text-[#4338CA] hover:underline"
+                            href={p.sourceDriveFileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Drive
+                          </a>
+                        ) : (
+                          <span className="text-[12.5px] text-[#8A8680]">—</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {productsQuery.data && visibleProducts.length === 0 && (
+                  <div className="px-6 py-8 text-center text-sm text-[#8A8680]">
+                    Nenhuma sugestão neste filtro. Gere sugestões acima.
+                  </div>
+                )}
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+
+            {visibleProducts.length > PAGE_SIZE && (
+              <div className="flex items-center justify-between border-t border-[#EEEDEA] px-6 py-3 text-xs text-[#8A8680]">
+                <span>
+                  Mostrando {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, visibleProducts.length)} de{" "}
+                  {visibleProducts.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className={GHOST_BTN_CLASS}
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    ← Anterior
+                  </Button>
+                  <span>
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    className={GHOST_BTN_CLASS}
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    Próxima →
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1142,7 +1249,7 @@ function classifyGen(p: GenInfo): Exclude<GenFilter, "all"> {
   return "none";
 }
 
-function SortableTh({
+function SortableHeader({
   label,
   sortKey,
   current,
@@ -1160,18 +1267,16 @@ function SortableTh({
   const active = current === sortKey;
   const arrow = active ? (dir === "asc" ? "▲" : "▼") : "";
   return (
-    <th className={`px-3 py-2 ${align === "center" ? "text-center" : "text-left"}`}>
-      <button
-        type="button"
-        onClick={() => onClick(sortKey)}
-        className={`inline-flex items-center gap-1 uppercase tracking-wide hover:text-foreground ${
-          active ? "text-foreground" : ""
-        }`}
-      >
-        {label}
-        <span className="text-[10px]">{arrow || "↕"}</span>
-      </button>
-    </th>
+    <button
+      type="button"
+      onClick={() => onClick(sortKey)}
+      className={`inline-flex items-center gap-1 uppercase tracking-[0.03em] text-[#8A8680] hover:text-[#1C1B1A] ${
+        align === "center" ? "justify-center" : "justify-start"
+      } ${active ? "text-[#1C1B1A]" : ""}`}
+    >
+      {label}
+      <span className="text-[10px]">{arrow || "↕"}</span>
+    </button>
   );
 }
 
@@ -1183,7 +1288,7 @@ function generationCellLabel(p: GenInfo): React.ReactNode {
     const date = formatDatePtBr(p.generatedAt ?? p.genCompletedAt);
     return (
       <span className="font-medium text-emerald-600">
-        ✅ pronto{date ? <span className="ml-1 font-normal text-muted-foreground">({date})</span> : null}
+        ✅ pronto{date ? <span className="ml-1 font-normal text-[#8A8680]">({date})</span> : null}
       </span>
     );
   }
@@ -1191,22 +1296,5 @@ function generationCellLabel(p: GenInfo): React.ReactNode {
     return <span className="text-blue-600">⚙️ gerando {p.genStep ?? 0}/3</span>;
   }
   if (p.genQueuedAt) return <span className="text-amber-600">⏳ na fila</span>;
-  return <span className="text-muted-foreground text-xs">não gerado</span>;
-}
-
-function statusVariant(
-  status: string,
-): "default" | "secondary" | "destructive" | "outline" {
-  switch (status) {
-    case "approved":
-    case "exported":
-      return "default";
-    case "rejected":
-    case "error":
-      return "destructive";
-    case "suggested":
-      return "secondary";
-    default:
-      return "outline";
-  }
+  return <span className="text-xs text-[#8A8680]">não gerado</span>;
 }
