@@ -741,8 +741,7 @@ export const catalogRouter = router({
     .input(
       z.object({
         fileBase64: z.string().min(1),
-        // "ambos" (padrão) = matriz normal: 60x40 e 70x50 em Retrato + Paisagem,
-        // os 6 tamanhos maiores só em Paisagem.
+        // "ambos" (padrão) = os 8 tamanhos em Retrato E Paisagem (16 variações).
         // "somente_retrato" / "somente_paisagem" = a arte só existe numa
         // orientação (ex: obra muito vertical ou muito horizontal) — gera
         // TODOS os 8 tamanhos só naquela orientação.
@@ -774,37 +773,23 @@ export const catalogRouter = router({
         { nome: "150cm x 100cm", altura: 9, largura: 105, comprimento: 155, pesoGramas: 7880, precoCusto: 300.0 },
         { nome: "160cm x 110cm", altura: 9, largura: 115, comprimento: 165, pesoGramas: 9000, precoCusto: 318.0 },
       ];
-      const tamanhoByNome = new Map(TAMANHOS.map((t) => [t.nome, t]));
-      const tamanho = (nome: string): SizeRow => {
-        const t = tamanhoByNome.get(nome);
-        if (!t) throw new Error(`Tamanho não encontrado: ${nome}`);
-        return t;
-      };
-      // Matriz fixa de 10 variações (Tamanho × Orientação), confirmada com a
-      // Priscila em 2026-07-06: só os 2 tamanhos menores vêm em Retrato E
-      // Paisagem — os 6 tamanhos maiores só em Paisagem. Preço/peso vêm de
+      // "Ambos" (padrão): os 8 tamanhos em Retrato E Paisagem (16 variações)
+      // — ajustado em 2026-07-10: a restrição antiga de só os 2 tamanhos
+      // menores terem Retrato não vale mais, alguns tamanhos grandes também
+      // saem em retrato. "somente_retrato"/"somente_paisagem" continuam como
+      // exceção manual pra arte que não pode ser reenquadrada na outra
+      // orientação (8 tamanhos só naquela orientação). Preço/peso vêm de
       // TAMANHOS, a orientação não altera esses valores.
       const ORIENTACAO_TIPO_VARIACAO = "Orientação";
-      const VARIACOES_BASE: { tamanho: SizeRow; orientacao: "Retrato" | "Paisagem" }[] = [
-        { tamanho: tamanho("60cm x 40cm"), orientacao: "Retrato" },
-        { tamanho: tamanho("60cm x 40cm"), orientacao: "Paisagem" },
-        { tamanho: tamanho("70cm x 50cm"), orientacao: "Retrato" },
-        { tamanho: tamanho("70cm x 50cm"), orientacao: "Paisagem" },
-        { tamanho: tamanho("80cm x 55cm"), orientacao: "Paisagem" },
-        { tamanho: tamanho("90cm x 60cm"), orientacao: "Paisagem" },
-        { tamanho: tamanho("100cm x 70cm"), orientacao: "Paisagem" },
-        { tamanho: tamanho("120cm x 80cm"), orientacao: "Paisagem" },
-        { tamanho: tamanho("150cm x 100cm"), orientacao: "Paisagem" },
-        { tamanho: tamanho("160cm x 110cm"), orientacao: "Paisagem" },
-      ];
-      // "somente_retrato"/"somente_paisagem": todos os 8 tamanhos só naquela
-      // orientação (nem os 2 tamanhos menores ganham a outra orientação).
       const VARIACOES =
         input.orientationMode === "somente_paisagem"
           ? TAMANHOS.map((t) => ({ tamanho: t, orientacao: "Paisagem" as const }))
           : input.orientationMode === "somente_retrato"
             ? TAMANHOS.map((t) => ({ tamanho: t, orientacao: "Retrato" as const }))
-            : VARIACOES_BASE;
+            : TAMANHOS.flatMap((t) => [
+                { tamanho: t, orientacao: "Retrato" as const },
+                { tamanho: t, orientacao: "Paisagem" as const },
+              ]);
       const ESTOQUE_POR_VARIACAO = 99;
 
       // Aceita data URL (data:...;base64,XXX) ou base64 puro.

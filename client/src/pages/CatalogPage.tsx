@@ -813,7 +813,7 @@ export default function CatalogPage() {
                   ? "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 8 variações por produto: 1 por tamanho, todas em Paisagem."
                   : orientationMode === "somente_retrato"
                     ? "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 8 variações por produto: 1 por tamanho, todas em Retrato."
-                    : "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 10 variações por produto: Tamanho × Orientação (60x40 e 70x50 em Retrato e Paisagem, os demais tamanhos só em Paisagem)."
+                    : "Suba a planilha de produtos que a Tray exporta após a importação (CSV ou XLSX, com a coluna 'Código produto' preenchida). Gera 16 variações por produto: os 8 tamanhos em Retrato e Paisagem."
               }
             >
               {exportTrayVariationsMutation.isPending ? "..." : "Gerar variações"}
@@ -829,7 +829,7 @@ export default function CatalogPage() {
                 <SelectTrigger
                   id="orientation-mode"
                   className="h-8 w-44 text-xs"
-                  title="Ambos: 60x40 e 70x50 saem em Retrato e Paisagem, os demais tamanhos só em Paisagem. Somente retrato/paisagem: todos os 8 tamanhos só naquela orientação — use quando a arte não pode ser reenquadrada na outra."
+                  title="Ambos: os 8 tamanhos saem em Retrato e Paisagem (16 variações). Somente retrato/paisagem: todos os 8 tamanhos só naquela orientação — use quando a arte não pode ser reenquadrada na outra."
                 >
                   <SelectValue />
                 </SelectTrigger>
