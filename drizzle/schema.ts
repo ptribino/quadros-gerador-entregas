@@ -2,6 +2,8 @@ import {
   boolean,
   decimal,
   int,
+  json,
+  longtext,
   mysqlEnum,
   mysqlTable,
   text,
@@ -159,6 +161,26 @@ export const products = mysqlTable(
     // Estilo escolhido manualmente na fila (opcional). Nulo = usa o padrão
     // de marca goquadros_signature.
     genStyleOverride: varchar("genStyleOverride", { length: 32 }),
+    // Fase do pipeline assíncrono via Gemini Batch API: 'a' (lifestyles +
+    // mockup base) -> 'b' (recolors de moldura) -> null (montagem concluída
+    // ou ainda não iniciado). Ver server/_core/catalogWorker.ts.
+    genPhase: varchar("genPhase", { length: 8 }),
+    // Escolhas aleatórias (frame/room/style/orientation) feitas uma única
+    // vez no início da geração — persistidas porque o processamento agora
+    // atravessa múltiplos ticks assíncronos do worker (antes eram
+    // variáveis locais de runForProduct, que era uma chamada síncrona só).
+    genParams: json("genParams").$type<{
+      frame: string;
+      orientation: string;
+      regularRoom: string;
+      regularStyle: string;
+      proRoom: string;
+      proStyle: string;
+      // ID do arquivo "-web.jpg" (arte original sem moldura/ambiente) já
+      // criado na Etapa 0 — reusado na montagem final sem precisar
+      // reconsultar o Drive por nome.
+      originalWebFileId: string;
+    }>(),
 
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -173,3 +195,54 @@ export const products = mysqlTable(
 
 export type Product = typeof products.$inferSelect;
 export type InsertProduct = typeof products.$inferInsert;
+
+/**
+ * Uma linha por chamada de geração de imagem (Gemini) da fila de catálogo,
+ * via Gemini Batch API. Fase A = lifestyle-regular + lifestyle-pro +
+ * mockup-base (independentes, referência = arte original). Fase B = os 3
+ * recolors de moldura (independentes entre si, referência = resultado do
+ * mockup-base da fase A). Linhas são apagadas assim que o produto é
+ * finalizado — não guardamos base64 indefinidamente.
+ * Ver server/_core/catalogWorker.ts e server/services/catalogPipeline.ts.
+ */
+export const productGenTaskKindEnum = [
+  "lifestyle_regular",
+  "lifestyle_pro",
+  "mockup_base",
+  "mockup_recolor",
+] as const;
+
+export const productGenTaskStatusEnum = [
+  "pending",
+  "submitted",
+  "succeeded",
+  "failed",
+] as const;
+
+export const productGenTasks = mysqlTable("product_gen_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  productId: int("productId").notNull(),
+  phase: varchar("phase", { length: 1 }).notNull(), // 'a' | 'b'
+  kind: mysqlEnum("kind", productGenTaskKindEnum).notNull(),
+  // Só usado em mockup_base/mockup_recolor — qual cor de moldura essa task representa.
+  frameColor: varchar("frameColor", { length: 32 }),
+  prompt: text("prompt").notNull(),
+  referenceImageB64: longtext("referenceImageB64").notNull(),
+  referenceMimeType: varchar("referenceMimeType", { length: 64 }).notNull(),
+  // Redundante com products.genParams.orientation, mas guardado aqui pra
+  // cada task ser autossuficiente no momento da submissão ao batch (sem
+  // precisar de join de volta em products).
+  aspectRatio: varchar("aspectRatio", { length: 8 }).notNull(),
+  status: mysqlEnum("status", productGenTaskStatusEnum).default("pending").notNull(),
+  batchName: varchar("batchName", { length: 128 }),
+  batchRequestKey: varchar("batchRequestKey", { length: 64 }),
+  resultB64: longtext("resultB64"),
+  resultMimeType: varchar("resultMimeType", { length: 64 }),
+  attempts: int("attempts").default(0).notNull(),
+  error: text("error"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ProductGenTask = typeof productGenTasks.$inferSelect;
+export type InsertProductGenTask = typeof productGenTasks.$inferInsert;

@@ -1,19 +1,22 @@
 /**
  * Pipeline do Passo 2 + Passo 3 do mapa mental:
  *  1. Baixa a imagem original do banco (Drive da GN Packz, via OAuth)
- *  2. Gera 3 imagens com Gemini (lifestyle + lifestyle profissional + mockup)
+ *  2. Gera 6 imagens com Gemini via Batch API (2 lifestyles + mockup base +
+ *     3 recolors de moldura) — assíncrono, em duas fases (ver catalogWorker.ts)
  *  3. Cria pasta `[SKU] Nome/` no Drive da Priscila (DRIVE_DESTINATION_FOLDER_ID)
  *  4. Faz upload de original + geradas, define permissão pública
  *  5. Devolve URLs públicas (uc?export=download) prontas pra planilha Tray
  *
- * Cada produto = 1 invocação de `runForProduct`. O worker chama esta
- * função em background uma vez por job da fila.
+ * Este módulo não chama o Gemini diretamente — só monta prompts/specs de
+ * task (`prepareProduct`, `buildPhaseBTasks`) e faz a montagem final a
+ * partir de resultados já prontos (`assembleProduct`). Quem efetivamente
+ * submete/consulta o lote na Gemini Batch API é `catalogWorker.ts`, via
+ * `googleImagenService.submitBatch`/`getBatch` (freepikService.ts).
  */
 import sharp from "sharp";
 import { ENV } from "../_core/env";
 import { detectOrientation } from "../_core/orientation";
 import { googleDriveService } from "./googleDriveService";
-import { googleImagenService } from "./freepikService";
 import { promptAgentService, FRAMES, framesForStyle } from "./promptAgentService";
 import type { FrameType, RoomType, StyleType, Orientation } from "./promptAgentService";
 
@@ -67,7 +70,7 @@ function prefersOfficeScene(aiPalavrasChave: string | null | undefined): boolean
 export interface PipelineResult {
   productFolderId: string;
   productFolderUrl: string;
-  imageUrls: string[]; // URLs públicas das 3 imagens geradas (lifestyle, profissional, mockup)
+  imageUrls: string[]; // URLs públicas das 4 imagens (original web-fit, lifestyle 1, lifestyle 2, mockup)
   /** URL do mockup gerado para CADA cor de moldura — 1 por FrameType. */
   mockupUrls: Record<FrameType, string>;
 }
@@ -157,81 +160,52 @@ async function fitForEcommerce(
   return { buffer: fallback, mimeType: "image/jpeg" };
 }
 
-/**
- * Gera UMA imagem chamando o gerador existente (Gemini 2.5 Flash Image).
- */
-async function generateLifestyle(
-  frame: FrameType,
-  room: RoomType,
-  style: StyleType,
-  referenceDataUrl: string,
-  orientation: Orientation,
-): Promise<{ buffer: Buffer; mimeType: string }> {
-  const prompt = promptAgentService.getPrompt("lifestyle", frame, room, style, orientation);
-  return runGeneration(prompt, referenceDataUrl, `lifestyle/${frame}/${room}/${style}`, orientation);
+function aspectRatioFor(orientation: Orientation): "4:3" | "3:4" {
+  return orientation === "horizontal" ? "4:3" : "3:4";
 }
 
-async function generateMockup(
-  frame: FrameType,
-  referenceDataUrl: string,
-  orientation: Orientation,
-): Promise<{ buffer: Buffer; mimeType: string }> {
-  const prompt = promptAgentService.getPrompt("mockup", frame, orientation);
-  return runGeneration(prompt, referenceDataUrl, `mockup/${frame}`, orientation);
+/** Parâmetros sorteados uma única vez no início da geração de um produto. */
+export interface GenParams {
+  frame: FrameType;
+  orientation: Orientation;
+  regularRoom: RoomType;
+  regularStyle: StyleType;
+  proRoom: RoomType;
+  proStyle: StyleType;
+  /** ID do arquivo "-web.jpg" (arte original sem moldura/ambiente), já criado na Etapa 0. */
+  originalWebFileId: string;
 }
 
-/**
- * Deriva um mockup em OUTRA cor de moldura a partir de um mockup JÁ
- * GERADO (não a arte crua) — repinta só a moldura, preservando ângulo,
- * corte, luz e profundidade da foto-base. Gerar cada cor do zero a partir
- * da arte crua produzia fotos visivelmente diferentes entre as 4 cores
- * (câmera, corte, até a arte renderizada de forma distinta).
- */
-async function recolorMockup(
-  toFrame: FrameType,
-  baseMockupDataUrl: string,
-  orientation: Orientation,
-): Promise<{ buffer: Buffer; mimeType: string }> {
-  const prompt = promptAgentService.buildMockupRecolorPrompt(toFrame, orientation);
-  return runGeneration(prompt, baseMockupDataUrl, `mockup-recolor/${toFrame}`, orientation);
+/** Especificação de UMA chamada de geração de imagem — vira 1 request no lote Gemini. */
+export interface GenTaskSpec {
+  kind: "lifestyle_regular" | "lifestyle_pro" | "mockup_base" | "mockup_recolor";
+  /** Só usado em mockup_base/mockup_recolor — qual cor de moldura essa task representa. */
+  frameColor?: FrameType;
+  prompt: string;
+  referenceImageB64: string;
+  referenceMimeType: string;
+  aspectRatio: "4:3" | "3:4";
 }
 
-async function runGeneration(
-  prompt: string,
-  referenceDataUrl: string,
-  label: string,
-  orientation: Orientation,
-): Promise<{ buffer: Buffer; mimeType: string }> {
-  const result = await googleImagenService.generateImages({
-    prompt,
-    referenceImageUrl: referenceDataUrl,
-    numImages: 1,
-    aspectRatio: orientation === "horizontal" ? "4:3" : "3:4",
-  });
-
-  const img = result.images?.[0];
-  if (result.status !== "completed" || !img?.b64Data) {
-    throw new Error(`Falha na geração ${label}: ${result.error ?? "sem imagem"}`);
-  }
-
-  return {
-    buffer: Buffer.from(img.b64Data, "base64"),
-    mimeType: img.mimeType || "image/jpeg",
-  };
+export interface PreparedProduct {
+  productFolderId: string;
+  productFolderUrl: string;
+  genParams: GenParams;
+  /** As 3 tasks independentes da fase A: lifestyle_regular, lifestyle_pro, mockup_base. */
+  phaseATasks: GenTaskSpec[];
 }
 
 /**
- * Roda o pipeline completo para um produto.
- * Chama de dentro do worker; retorna URLs públicas das 3 imagens.
- *
- * `onProgress` é chamado depois de cada subetapa concluída (1..3),
- * permitindo persistir progresso parcial no DB.
+ * ETAPA 0 do pipeline — roda de forma síncrona e imediata (não depende do
+ * Gemini, só de Drive): cria a pasta do produto, baixa e sobe a arte
+ * original, sorteia frame/room/style/orientation, e monta as specs das 3
+ * tasks de geração da fase A. Quem chama (catalogWorker.ts) persiste
+ * `genParams` e insere `phaseATasks` como linhas de `product_gen_tasks`.
  */
-export async function runForProduct(
+export async function prepareProduct(
   product: PipelineProduct,
   deps: PipelineDeps,
-  onProgress?: (step: number, message: string) => Promise<void> | void,
-): Promise<PipelineResult> {
+): Promise<PreparedProduct> {
   if (!ENV.driveDestinationFolderId) {
     throw new Error("DRIVE_DESTINATION_FOLDER_ID não configurado");
   }
@@ -254,11 +228,15 @@ export async function runForProduct(
     googleDriveService.getOrCreateFolder(accessToken, "02_Lifestyle", productFolder.id),
     googleDriveService.getOrCreateFolder(accessToken, "03_Mockups", productFolder.id),
   ]);
+  // lifestyleFolder/mockupFolder não são usadas aqui — recriadas (idempotente,
+  // get-or-create por nome) em assembleProduct, quando os uploads acontecem.
+  void lifestyleFolder;
+  void mockupFolder;
 
-  // ETAPA 1 — Baixar original e ter como data URL pra usar nas gerações
+  // Baixar original e ter como base64 pra usar como referência nas gerações
   const originalBuffer = await googleDriveService.downloadFile(accessToken, product.sourceDriveFileId);
   const originalMime = product.sourceDriveMimeType || "image/jpeg";
-  const referenceDataUrl = `data:${originalMime};base64,${originalBuffer.toString("base64")}`;
+  const originalB64 = originalBuffer.toString("base64");
 
   // Orientação real da arte (largura vs altura) — quadros horizontais (ex:
   // obras clássicas tipo "Santa Ceia") precisam ser apresentados em paisagem
@@ -267,7 +245,6 @@ export async function runForProduct(
 
   // Nomes ESTÁVEIS — sem incluir frame/room/style sorteados, pra que o cleanup
   // (uploadFileReplacing) consiga encontrar o arquivo antigo no caso de re-geração.
-  // A info do sorteio fica nos logs via onProgress (e em genError se falhar).
 
   // Salva o original sem resize (arquivo / impressão)
   const origExt = originalMime.includes("png") ? "png" : "jpg";
@@ -318,9 +295,122 @@ export async function runForProduct(
     prefersOfficeScene(product.aiPalavrasChave) && eligibleRooms.includes("office");
   const proRoom: RoomType = forceOffice ? "office" : proRoomRandom;
 
+  const aspectRatio = aspectRatioFor(orientation);
+
+  const phaseATasks: GenTaskSpec[] = [
+    {
+      kind: "lifestyle_regular",
+      prompt: promptAgentService.getPrompt("lifestyle", frame, regularRoom, regularStyle, orientation),
+      referenceImageB64: originalB64,
+      referenceMimeType: originalMime,
+      aspectRatio,
+    },
+    {
+      kind: "lifestyle_pro",
+      prompt: promptAgentService.getPrompt("lifestyle", frame, proRoom, proStyle, orientation),
+      referenceImageB64: originalB64,
+      referenceMimeType: originalMime,
+      aspectRatio,
+    },
+    {
+      kind: "mockup_base",
+      frameColor: frame,
+      prompt: promptAgentService.getPrompt("mockup", frame, orientation),
+      referenceImageB64: originalB64,
+      referenceMimeType: originalMime,
+      aspectRatio,
+    },
+  ];
+
+  return {
+    productFolderId: productFolder.id,
+    productFolderUrl: productFolder.webViewLink,
+    genParams: {
+      frame,
+      orientation,
+      regularRoom,
+      regularStyle,
+      proRoom,
+      proStyle,
+      originalWebFileId: originalWebFile.id,
+    },
+    phaseATasks,
+  };
+}
+
+/**
+ * Monta as 3 tasks da fase B (recolors de moldura) a partir do resultado
+ * JÁ GERADO do mockup_base da fase A — repinta só a moldura, preservando
+ * ângulo, corte, luz e profundidade da foto-base. Gerar cada cor do zero a
+ * partir da arte crua produzia fotos visivelmente diferentes entre as 4
+ * cores (câmera, corte, até a arte renderizada de forma distinta).
+ */
+export function buildPhaseBTasks(
+  genParams: GenParams,
+  mockupBaseResultB64: string,
+  mockupBaseResultMimeType: string,
+): GenTaskSpec[] {
+  const otherFrames = FRAMES.filter((f) => f !== genParams.frame);
+  const aspectRatio = aspectRatioFor(genParams.orientation);
+
+  return otherFrames.map((toFrame) => ({
+    kind: "mockup_recolor" as const,
+    frameColor: toFrame,
+    prompt: promptAgentService.buildMockupRecolorPrompt(toFrame, genParams.orientation),
+    referenceImageB64: mockupBaseResultB64,
+    referenceMimeType: mockupBaseResultMimeType,
+    aspectRatio,
+  }));
+}
+
+/** Resultado de UMA task já concluída, pronto pra montagem final. */
+export interface GenTaskResult {
+  kind: GenTaskSpec["kind"];
+  frameColor?: FrameType;
+  b64Data: string;
+  mimeType: string;
+}
+
+/**
+ * Montagem final — roda depois que TODAS as 6 tasks (fase A + fase B) de
+ * um produto estão prontas. Reaproveita exatamente a lógica de upload/URLs
+ * que antes vivia no fim de `runForProduct`: recria (idempotente, por nome)
+ * as subpastas de Drive, sobe cada imagem já gerada, define permissão
+ * pública, e monta `imageUrls`/`mockupUrls` na mesma ordem de sempre.
+ */
+export async function assembleProduct(
+  product: PipelineProduct,
+  deps: PipelineDeps,
+  genParams: GenParams,
+  results: GenTaskResult[],
+): Promise<PipelineResult> {
+  if (!ENV.driveDestinationFolderId) {
+    throw new Error("DRIVE_DESTINATION_FOLDER_ID não configurado");
+  }
+
+  const { accessToken } = deps;
+  const { frame } = genParams;
+
+  const folderName = `[${product.sku}] ${sanitizeFolderName(product.nome)}`;
+  const productFolder = await googleDriveService.getOrCreateFolder(
+    accessToken,
+    folderName,
+    ENV.driveDestinationFolderId,
+  );
+  const [lifestyleFolder, mockupFolder] = await Promise.all([
+    googleDriveService.getOrCreateFolder(accessToken, "02_Lifestyle", productFolder.id),
+    googleDriveService.getOrCreateFolder(accessToken, "03_Mockups", productFolder.id),
+  ]);
+
+  const findResult = (kind: GenTaskSpec["kind"], frameColor?: FrameType): GenTaskResult => {
+    const found = results.find((r) => r.kind === kind && (frameColor ? r.frameColor === frameColor : true));
+    if (!found) throw new Error(`Resultado ausente para ${kind}${frameColor ? `/${frameColor}` : ""}`);
+    return found;
+  };
+
   // ETAPA 2 — Lifestyle "regular"
-  const lifeRaw = await generateLifestyle(frame, regularRoom, regularStyle, referenceDataUrl, orientation);
-  const life = await fitForEcommerce(lifeRaw.buffer);
+  const lifeRaw = findResult("lifestyle_regular");
+  const life = await fitForEcommerce(Buffer.from(lifeRaw.b64Data, "base64"));
   const lifeFile = await googleDriveService.uploadFileReplacing(
     accessToken,
     `${product.sku}-lifestyle-1.jpg`,
@@ -329,11 +419,10 @@ export async function runForProduct(
     lifestyleFolder.id,
   );
   await googleDriveService.makePublic(accessToken, lifeFile.id);
-  await onProgress?.(1, `lifestyle ${frame}/${regularRoom}/${regularStyle}`);
 
-  // ETAPA 3 — Segunda lifestyle (mesmo pool de cômodos, sorteio independente)
-  const proRaw = await generateLifestyle(frame, proRoom, proStyle, referenceDataUrl, orientation);
-  const pro = await fitForEcommerce(proRaw.buffer);
+  // ETAPA 3 — Segunda lifestyle
+  const proRaw = findResult("lifestyle_pro");
+  const pro = await fitForEcommerce(Buffer.from(proRaw.b64Data, "base64"));
   const proFile = await googleDriveService.uploadFileReplacing(
     accessToken,
     `${product.sku}-lifestyle-2.jpg`,
@@ -342,35 +431,29 @@ export async function runForProduct(
     lifestyleFolder.id,
   );
   await googleDriveService.makePublic(accessToken, proFile.id);
-  await onProgress?.(2, `lifestyle ${frame}/${proRoom}/${proStyle}`);
 
   // ETAPA 4 — Mockups: UMA imagem por cor de moldura. São essas 4 fotos
   // que viram a "imagem principal da variação" de cada opção de Moldura na
   // planilha de variações Tray (ex: "Preta" → foto do mockup na moldura
-  // preta). A 1ª (mesma moldura escolhida pra coerência com as lifestyles)
-  // é gerada a partir da arte crua; as outras 3 são DERIVADAS dessa mesma
-  // foto (repintando só a moldura) em vez de geradas do zero — gerar cada
-  // cor independentemente produzia fotos com ângulo/corte/profundidade
-  // diferentes entre si, quebrando a consistência da variação.
+  // preta).
   const mockupUrls = {} as Record<FrameType, string>;
-  const [baseFrame, ...otherFrames] = [frame, ...FRAMES.filter((f) => f !== frame)];
 
-  const baseRaw = await generateMockup(baseFrame, referenceDataUrl, orientation);
-  const baseReferenceDataUrl = `data:${baseRaw.mimeType};base64,${baseRaw.buffer.toString("base64")}`;
-  const baseFitted = await fitForEcommerce(baseRaw.buffer);
+  const baseRaw = findResult("mockup_base", frame);
+  const baseFitted = await fitForEcommerce(Buffer.from(baseRaw.b64Data, "base64"));
   const baseFile = await googleDriveService.uploadFileReplacing(
     accessToken,
-    `${product.sku}-mockup-${baseFrame}.jpg`,
+    `${product.sku}-mockup-${frame}.jpg`,
     baseFitted.buffer,
     baseFitted.mimeType,
     mockupFolder.id,
   );
   await googleDriveService.makePublic(accessToken, baseFile.id);
-  mockupUrls[baseFrame] = googleDriveService.publicDownloadUrl(baseFile.id);
+  mockupUrls[frame] = googleDriveService.publicDownloadUrl(baseFile.id);
 
+  const otherFrames = FRAMES.filter((f) => f !== frame);
   for (const otherFrame of otherFrames) {
-    const recoloredRaw = await recolorMockup(otherFrame, baseReferenceDataUrl, orientation);
-    const recolored = await fitForEcommerce(recoloredRaw.buffer);
+    const recoloredRaw = findResult("mockup_recolor", otherFrame);
+    const recolored = await fitForEcommerce(Buffer.from(recoloredRaw.b64Data, "base64"));
     const file = await googleDriveService.uploadFileReplacing(
       accessToken,
       `${product.sku}-mockup-${otherFrame}.jpg`,
@@ -381,7 +464,6 @@ export async function runForProduct(
     await googleDriveService.makePublic(accessToken, file.id);
     mockupUrls[otherFrame] = googleDriveService.publicDownloadUrl(file.id);
   }
-  await onProgress?.(3, `mockups (${FRAMES.join(", ")})`);
 
   // Ordem das imagens na planilha Tray:
   //   imageUrls[0] = arte original web-fit (sem moldura/ambiente) — imagem principal
@@ -389,7 +471,7 @@ export async function runForProduct(
   //   imageUrls[2] = lifestyle 2
   //   imageUrls[3] = mockup — usa a moldura escolhida pra coerência com as lifestyles
   const imageUrls = [
-    googleDriveService.publicDownloadUrl(originalWebFile.id),
+    googleDriveService.publicDownloadUrl(genParams.originalWebFileId),
     googleDriveService.publicDownloadUrl(lifeFile.id),
     googleDriveService.publicDownloadUrl(proFile.id),
     mockupUrls[frame],

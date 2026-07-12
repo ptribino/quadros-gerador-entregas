@@ -24,6 +24,48 @@ export interface ImagenGenerationResponse {
   error?: string;
 }
 
+// ============================================================
+// Gemini Batch API — geração assíncrona em lote (50% mais barata que
+// generateContent, mesmo modelo). Usada pela fila de geração do catálogo
+// (server/_core/catalogWorker.ts). NÃO usada pelo fluxo manual "Gerar
+// variações" (generationRouter.ts), que continua síncrono via generateImages.
+// ============================================================
+
+export interface BatchImageRequest {
+  /** Chave única da request dentro do lote — usada pra casar o resultado de volta à task. */
+  key: string;
+  prompt: string;
+  referenceImageB64?: string;
+  referenceMimeType?: string;
+  aspectRatio?: '1:1' | '3:4' | '4:3' | '16:9' | '9:16';
+}
+
+export interface BatchSubmitResult {
+  /** Nome do job no formato "batches/xxxx", usado pra consultar o status depois. */
+  batchName: string;
+}
+
+export type BatchState =
+  | 'BATCH_STATE_PENDING'
+  | 'BATCH_STATE_RUNNING'
+  | 'BATCH_STATE_SUCCEEDED'
+  | 'BATCH_STATE_FAILED'
+  | 'BATCH_STATE_CANCELLED'
+  | 'BATCH_STATE_EXPIRED';
+
+export interface BatchResultItem {
+  key: string;
+  b64Data?: string;
+  mimeType?: string;
+  error?: string;
+}
+
+export interface BatchStatus {
+  state: BatchState;
+  /** Só populado quando state === BATCH_STATE_SUCCEEDED (resultados inline). */
+  results?: BatchResultItem[];
+}
+
 class GoogleImagenService {
   private apiKey: string;
 
@@ -151,6 +193,135 @@ class GoogleImagenService {
       throw new Error('Invalid data URL: no base64 content');
     }
     throw new Error('Only data URLs are supported. Upload the image first.');
+  }
+
+  /**
+   * Submete um lote de gerações de imagem via Gemini Batch API (inline,
+   * até ~20MB de payload total — quem chama é responsável por não passar
+   * disso, ver MAX_BATCH_PAYLOAD_BYTES em catalogWorker.ts).
+   */
+  async submitBatch(requests: BatchImageRequest[], displayName: string): Promise<BatchSubmitResult> {
+    if (!this.apiKey) {
+      throw new Error('GOOGLE_API_KEY is not configured. Set it in your .env file.');
+    }
+    if (requests.length === 0) {
+      throw new Error('submitBatch chamado sem requests');
+    }
+
+    const model = 'gemini-3.1-flash-image';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:batchGenerateContent?key=${this.apiKey}`;
+
+    const batchRequests = requests.map((req) => {
+      const parts: Array<Record<string, unknown>> = [];
+      if (req.referenceImageB64) {
+        parts.push({
+          inlineData: {
+            mimeType: req.referenceMimeType || 'image/jpeg',
+            data: req.referenceImageB64,
+          },
+        });
+      }
+      parts.push({ text: req.prompt });
+
+      return {
+        request: {
+          contents: [{ parts }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE'],
+            ...(req.aspectRatio ? { imageConfig: { aspectRatio: req.aspectRatio } } : {}),
+          },
+        },
+        metadata: { key: req.key },
+      };
+    });
+
+    const payload = {
+      batch: {
+        displayName,
+        inputConfig: {
+          requests: { requests: batchRequests },
+        },
+      },
+    };
+
+    console.log(`[GeminiBatch] Submetendo lote "${displayName}" com ${requests.length} request(s)...`);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[GeminiBatch] Erro ao submeter: ${errorText}`);
+      throw new Error(`Google Gemini Batch submit error (${response.status}): ${errorText}`);
+    }
+
+    const result = (await response.json()) as { name: string };
+    console.log(`[GeminiBatch] Lote submetido como ${result.name}`);
+    return { batchName: result.name };
+  }
+
+  /**
+   * Consulta o status de um job de batch. Só retorna `results` quando o
+   * job está SUCCEEDED (resultados inline, casados por `key`).
+   *
+   * Nota: o formato exato de um item individual com erro dentro de um job
+   * SUCCEEDED é inferido (não observado em teste real) — trata qualquer
+   * item sem imagem em `response.candidates` como falha daquela request
+   * específica, sem derrubar o job inteiro.
+   */
+  async getBatch(batchName: string): Promise<BatchStatus> {
+    if (!this.apiKey) {
+      throw new Error('GOOGLE_API_KEY is not configured. Set it in your .env file.');
+    }
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/${batchName}?key=${this.apiKey}`;
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Google Gemini Batch status error (${response.status}): ${errorText}`);
+    }
+
+    const result = (await response.json()) as {
+      metadata?: {
+        state?: BatchState;
+        output?: {
+          inlinedResponses?: {
+            inlinedResponses?: Array<{
+              metadata?: { key?: string };
+              response?: {
+                candidates?: Array<{
+                  content: {
+                    parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
+                  };
+                }>;
+              };
+              error?: { message?: string };
+            }>;
+          };
+        };
+      };
+    };
+
+    const state = result.metadata?.state ?? 'BATCH_STATE_PENDING';
+    if (state !== 'BATCH_STATE_SUCCEEDED') {
+      return { state };
+    }
+
+    const items = result.metadata?.output?.inlinedResponses?.inlinedResponses ?? [];
+    const results: BatchResultItem[] = items.map((item) => {
+      const key = item.metadata?.key ?? '';
+      const imagePart = item.response?.candidates?.[0]?.content.parts.find((p) => p.inlineData);
+      if (imagePart?.inlineData) {
+        return { key, b64Data: imagePart.inlineData.data, mimeType: imagePart.inlineData.mimeType };
+      }
+      return { key, error: item.error?.message ?? 'Nenhuma imagem retornada para essa request' };
+    });
+
+    return { state, results };
   }
 
   async validateApiKey(): Promise<boolean> {
