@@ -157,6 +157,12 @@ export default function CatalogPage() {
   const { user, loading: authLoading } = useAuth();
   const [categoryId, setCategoryId] = useState<string>("");
   const [folderId, setFolderId] = useState<string>("");
+  // Pasta "raiz" cujas subpastas aparecem no seletor Subpasta abaixo — igual
+  // a `folderId` na maioria dos casos, mas fica parada no pai quando o
+  // usuário escolhe uma subpasta específica (senão o seletor perderia as
+  // opções irmãs). Atualizada ao trocar Categoria, colar link, ou tirar o
+  // foco do campo Folder ID editado manualmente.
+  const [baseFolderId, setBaseFolderId] = useState<string>("");
   const [subFolderId, setSubFolderId] = useState<string>(SUBFOLDER_ALL);
   const [folderLinkInput, setFolderLinkInput] = useState<string>("");
   const [folderLinkError, setFolderLinkError] = useState<string>("");
@@ -180,14 +186,12 @@ export default function CatalogPage() {
   const foldersQuery = trpc.catalog.listBankFolders.useQuery(undefined, {
     enabled: Boolean(user),
   });
-  const categoryRootFolderId = useMemo(() => {
-    if (!categoryId || !foldersQuery.data || !categoriesQuery.data) return undefined;
-    const cat = categoriesQuery.data.find((c) => c.id === Number(categoryId));
-    return cat && foldersQuery.data.find((f) => f.name === cat.folderName)?.id;
-  }, [categoryId, foldersQuery.data, categoriesQuery.data]);
+  // Subpastas de QUALQUER pasta colada em baseFolderId — não depende mais de
+  // Categoria estar mapeada a uma pasta do banco (listBankFolders aceita
+  // qualquer parentFolderId do Drive).
   const subFoldersQuery = trpc.catalog.listBankFolders.useQuery(
-    { parentFolderId: categoryRootFolderId },
-    { enabled: Boolean(user) && Boolean(categoryRootFolderId) },
+    { parentFolderId: baseFolderId },
+    { enabled: Boolean(user) && Boolean(baseFolderId) },
   );
   const folderPreviewQuery = trpc.catalog.listFolderImages.useQuery(
     { folderId },
@@ -496,17 +500,25 @@ export default function CatalogPage() {
     const folder = cat && foldersQuery.data?.find((f) => f.name === cat.folderName);
     // Preenche com a pasta mapeada quando existe; caso contrário limpa o campo
     // pra deixar claro que o usuário precisa colar o folderId manualmente
-    // (categorias marcadas "(sem pasta)").
-    setFolderId(folder ? folder.id : "");
-    // Nova categoria = reseta a escolha de subpasta da categoria anterior.
+    // (categorias marcadas "(sem pasta)"). O usuário pode sobrescrever
+    // colando qualquer outro caminho do Drive.
+    const fid = folder ? folder.id : "";
+    setFolderId(fid);
+    setBaseFolderId(fid);
     setSubFolderId(SUBFOLDER_ALL);
   };
 
   const handleSelectSubFolder = (id: string) => {
     setSubFolderId(id);
-    // SUBFOLDER_ALL = "Todas as subpastas" -> volta a apontar pra pasta-mãe
-    // da categoria (suggestProducts já mergulha recursivamente nas subpastas).
-    setFolderId(id === SUBFOLDER_ALL ? categoryRootFolderId ?? "" : id);
+    // SUBFOLDER_ALL = "Todas as subpastas" -> volta a apontar pra pasta base.
+    setFolderId(id === SUBFOLDER_ALL ? baseFolderId : id);
+  };
+
+  // Ao sair do campo Folder ID editado à mão, esse valor vira a nova "raiz"
+  // pra listar subpastas — dispara a consulta só no blur, não a cada tecla.
+  const handleFolderIdBlur = () => {
+    setBaseFolderId(folderId);
+    setSubFolderId(SUBFOLDER_ALL);
   };
 
   // Pra pastas que ainda não estão mapeadas a nenhuma categoria (ex: banco
@@ -522,6 +534,7 @@ export default function CatalogPage() {
     const match = value.match(/\/folders\/([a-zA-Z0-9_-]+?)(?=https?:\/\/|[/?]|$)/);
     if (match) {
       setFolderId(match[1]);
+      setBaseFolderId(match[1]);
       setSubFolderId(SUBFOLDER_ALL);
     } else {
       setFolderLinkError("Link inválido. Cole o link completo de uma pasta do Google Drive.");
@@ -614,13 +627,13 @@ export default function CatalogPage() {
                 <Select
                   value={subFolderId}
                   onValueChange={handleSelectSubFolder}
-                  disabled={!categoryRootFolderId}
+                  disabled={!baseFolderId}
                 >
                   <SelectTrigger className={FIELD_INPUT_CLASS}>
                     <SelectValue
                       placeholder={
-                        !categoryId
-                          ? "Selecione uma categoria primeiro"
+                        !baseFolderId
+                          ? "Cole um Folder ID/link primeiro"
                           : subFoldersQuery.isLoading
                             ? "Carregando..."
                             : "Todas as subpastas"
@@ -641,11 +654,8 @@ export default function CatalogPage() {
                 <Label className={FIELD_LABEL_CLASS}>Folder ID (auto-preenchido)</Label>
                 <Input
                   value={folderId}
-                  onChange={(e) => {
-                    setFolderId(e.target.value);
-                    // Edição manual do ID invalida a escolha de subpasta (deixa de bater com o valor).
-                    setSubFolderId(SUBFOLDER_ALL);
-                  }}
+                  onChange={(e) => setFolderId(e.target.value)}
+                  onBlur={handleFolderIdBlur}
                   placeholder="ID da pasta no Drive"
                   className={`${FIELD_INPUT_CLASS} mb-2`}
                 />
