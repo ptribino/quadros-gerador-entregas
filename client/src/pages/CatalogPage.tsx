@@ -496,16 +496,19 @@ export default function CatalogPage() {
 
   const handleSelectCategory = (id: string) => {
     setCategoryId(id);
-    const cat = categoriesQuery.data?.find((c) => c.id === Number(id));
-    const folder = cat && foldersQuery.data?.find((f) => f.name === cat.folderName);
-    // Preenche com a pasta mapeada quando existe; caso contrário limpa o campo
-    // pra deixar claro que o usuário precisa colar o folderId manualmente
-    // (categorias marcadas "(sem pasta)"). O usuário pode sobrescrever
-    // colando qualquer outro caminho do Drive.
-    const fid = folder ? folder.id : "";
-    setFolderId(fid);
-    setBaseFolderId(fid);
-    setSubFolderId(SUBFOLDER_ALL);
+    // Categoria só define SKU/categoria da Tray — não mexe mais no Folder ID
+    // se o usuário já colou/escolheu uma pasta manualmente (senão trocar de
+    // categoria apaga um Folder ID/Subpasta que a pessoa já tinha montado).
+    // Só pré-preenche como atalho quando o campo ainda está vazio.
+    if (!folderId) {
+      const cat = categoriesQuery.data?.find((c) => c.id === Number(id));
+      const folder = cat && foldersQuery.data?.find((f) => f.name === cat.folderName);
+      if (folder) {
+        setFolderId(folder.id);
+        setBaseFolderId(folder.id);
+        setSubFolderId(SUBFOLDER_ALL);
+      }
+    }
   };
 
   const handleSelectSubFolder = (id: string) => {
@@ -603,24 +606,36 @@ export default function CatalogPage() {
             <h2 className="m-0 mb-[18px] text-[14.5px] font-extrabold text-[#1C1B1A]">
               Gerar sugestões por categoria
             </h2>
-            <div className="grid gap-[22px] sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.4fr_1fr]">
+            <div className="grid gap-[22px] sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
               <div>
-                <Label className={FIELD_LABEL_CLASS}>Categoria</Label>
-                <Select value={categoryId} onValueChange={handleSelectCategory}>
-                  <SelectTrigger className={FIELD_INPUT_CLASS}>
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoriesQuery.data?.map((cat) => {
-                      const folder = folderByName.get(cat.id);
-                      return (
-                        <SelectItem key={cat.id} value={String(cat.id)}>
-                          {cat.code3} — {cat.displayName} {folder ? "✓" : "(sem pasta)"}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                <Label className={FIELD_LABEL_CLASS}>Folder ID (cole o ID ou link da pasta)</Label>
+                <Input
+                  value={folderId}
+                  onChange={(e) => setFolderId(e.target.value)}
+                  onBlur={handleFolderIdBlur}
+                  placeholder="ID da pasta no Drive"
+                  className={`${FIELD_INPUT_CLASS} mb-2`}
+                />
+                <Input
+                  value={folderLinkInput}
+                  onChange={(e) => handleFolderLinkChange(e.target.value)}
+                  placeholder="Ou cole o link de uma pasta do Google Drive"
+                  className={`${FIELD_INPUT_CLASS} text-xs ${folderLinkError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                  title="Cola o ID ou o link de qualquer pasta do Drive — as subpastas dela aparecem no campo Subpasta ao lado"
+                />
+                {folderLinkError && (
+                  <p className="mt-1 text-xs text-destructive">{folderLinkError}</p>
+                )}
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="mt-2 h-auto p-0 text-[12.5px] text-[#4338CA]"
+                  disabled={!folderId}
+                  onClick={() => setPreviewOpen(true)}
+                >
+                  Ver imagens desta pasta
+                </Button>
               </div>
               <div>
                 <Label className={FIELD_LABEL_CLASS}>Subpasta (opcional)</Label>
@@ -651,34 +666,22 @@ export default function CatalogPage() {
                 </Select>
               </div>
               <div>
-                <Label className={FIELD_LABEL_CLASS}>Folder ID (auto-preenchido)</Label>
-                <Input
-                  value={folderId}
-                  onChange={(e) => setFolderId(e.target.value)}
-                  onBlur={handleFolderIdBlur}
-                  placeholder="ID da pasta no Drive"
-                  className={`${FIELD_INPUT_CLASS} mb-2`}
-                />
-                <Input
-                  value={folderLinkInput}
-                  onChange={(e) => handleFolderLinkChange(e.target.value)}
-                  placeholder="Ou cole o link de uma pasta do Google Drive"
-                  className={`${FIELD_INPUT_CLASS} text-xs ${folderLinkError ? "border-destructive focus-visible:ring-destructive" : ""}`}
-                  title="Pra pastas que ainda não estão mapeadas a nenhuma categoria — cola o link e o ID é extraído automaticamente"
-                />
-                {folderLinkError && (
-                  <p className="mt-1 text-xs text-destructive">{folderLinkError}</p>
-                )}
-                <Button
-                  type="button"
-                  variant="link"
-                  size="sm"
-                  className="mt-2 h-auto p-0 text-[12.5px] text-[#4338CA]"
-                  disabled={!folderId}
-                  onClick={() => setPreviewOpen(true)}
-                >
-                  Ver imagens desta pasta
-                </Button>
+                <Label className={FIELD_LABEL_CLASS}>Categoria (SKU / Tray)</Label>
+                <Select value={categoryId} onValueChange={handleSelectCategory}>
+                  <SelectTrigger className={FIELD_INPUT_CLASS}>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoriesQuery.data?.map((cat) => {
+                      const folder = folderByName.get(cat.id);
+                      return (
+                        <SelectItem key={cat.id} value={String(cat.id)}>
+                          {cat.code3} — {cat.displayName} {folder ? "✓" : "(sem pasta)"}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label className={FIELD_LABEL_CLASS}>Quantidade</Label>
