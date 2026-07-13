@@ -169,6 +169,24 @@ const FINISH_CONSTRAINTS = [
   'FRAME CONSTRUCTION: The printed artwork fills the entire frame opening, edge-to-edge with the wood molding. The inner edge of the wood touches the printed image directly with zero gap. Frame opening dimensions equal the print dimensions exactly. Contemporary frameless gallery look. No spacer, no mat board, no inner white border, no passe-partout, no white trim line between the print and the wood.',
 ].join(' ');
 
+// Reforço extra do "sem passe-partout" — em cenas lifestyle (interior mais
+// complexo que o mockup isolado) o modelo às vezes ignora a cláusula acima
+// dentro de FINISH_CONSTRAINTS e pinta uma borda branca fina mesmo assim.
+// Repetida como cláusula CRITICAL isolada, no mesmo padrão de
+// ARTWORK_FIDELITY/NO_TEXT_CONSTRAINT, que funcionaram melhor que uma frase
+// única no meio de uma lista longa.
+const NO_MAT_BORDER_REINFORCED = [
+  'CRITICAL — NO WHITE MAT OR BORDER OF ANY KIND AROUND THE ARTWORK:',
+  'There is absolutely NO white, cream, off-white or light-colored mat, passe-partout, spacer, or border between the printed artwork and the wood frame molding — not even a thin 1-2mm line.',
+  'The printed artwork touches the inner edge of the wood frame directly on all four sides, with zero visible gap or margin of any color between the print and the wood.',
+].join(' ');
+
+// Quadro pendurado na parede (não encostado no chão) deve ficar centralizado
+// na composição — sem isso o modelo às vezes desloca o quadro pra um dos
+// lados do enquadramento.
+const WALL_CENTERING_CLAUSE =
+  'Positioning: if the frame is leaning against the floor (propped up, not wall-mounted), slight off-center placement is natural. But if the frame is hanging ON the wall (not leaning on the floor), it MUST be horizontally centered in the frame — equal empty wall space on the left and right sides of the frame, not shifted toward one edge.';
+
 /**
  * Para cada estilo, as molduras que harmonizam visualmente. Usado pelo
  * pipeline do catálogo pra sortear UMA moldura coerente com o estilo
@@ -280,11 +298,13 @@ class PromptAgentService {
       `Lighting: warm golden directional sunlight entering through a window, casting crisp soft shadows on the floor and adjacent surfaces. Avoid flat ambient lighting and avoid window overexposure — keep the highlights controlled.`,
       `Color and depth: vivid saturated natural colors with rich contrast, deep tonal range (true blacks, clean whites), every plane crisp and in focus throughout the scene — deep focus, no shallow depth of field, no blurry background.`,
       `Composition: 35mm lens, frontal shot, camera positioned close to the wall. The framed artwork should fill roughly 65-75% of the image height and be the unmistakable visual anchor. DO NOT crop so tight that the room disappears — this must still read as a real lifestyle photo in a home, not an isolated product mockup: always keep a small recognizable hint of furniture and wall texture in frame (e.g. the arm of a sofa, the corner of a bed, the edge of a dining table). At the same time, furniture must stay a partial glimpse, not a full piece — never show an entire sofa, a full table with all its chairs, or the whole bed. No other wall art or gallery-wall arrangement visible — the featured piece is the only artwork on the wall.`,
+      WALL_CENTERING_CLAUSE,
       `Curated decor (small and supporting): at most one small object partially visible near the frame's edge — a ceramic vase or a stack of design books — not a full styled tablescape. No wide-angle pull-back showing entire rooms.`,
       `The LARGE framed print is the absolute visual anchor. It dominates the composition unmistakably — the eye goes to the artwork first — while the room around it stays clearly identifiable, just visually secondary.`,
       `Frame: thin, ${FRAME_DESCRIPTIONS[frame]}, intentionally chosen to harmonize with the room's palette and decor.`,
       ORIENTATION_CLAUSE[orientation],
       FINISH_CONSTRAINTS,
+      NO_MAT_BORDER_REINFORCED,
       ARTWORK_FIDELITY,
       NO_TEXT_CONSTRAINT,
       `Aspect ratio ${ASPECT_RATIO_BY_ORIENTATION[orientation]}.`,
