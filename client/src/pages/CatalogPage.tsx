@@ -283,6 +283,42 @@ export default function CatalogPage() {
     reader.readAsDataURL(file);
   };
 
+  const markExportedInputRef = useRef<HTMLInputElement>(null);
+  const markExportedMutation = trpc.catalog.markExportedFromTray.useMutation({
+    onSuccess: (res) => {
+      utils.catalog.listSuggestions.invalidate();
+      if (res.atualizados > 0) {
+        toast.success(
+          `${res.atualizados} produto(s) marcado(s) como Cadastrado na Tray` +
+            (res.jaEstavamCadastrados > 0 ? ` (${res.jaEstavamCadastrados} já estavam)` : ""),
+        );
+      } else if (res.jaEstavamCadastrados > 0) {
+        toast.info(`Todos os ${res.jaEstavamCadastrados} produtos encontrados já estavam marcados.`);
+      } else {
+        toast.warning("Nenhum SKU da planilha bateu com produtos deste catálogo.");
+      }
+      if (res.naoEncontrados > 0) {
+        const preview = res.naoEncontradosSkus.slice(0, 3).join(", ");
+        const suffix = res.naoEncontrados > 3 ? `, +${res.naoEncontrados - 3}` : "";
+        toast.warning(`${res.naoEncontrados} SKU(s) da planilha não encontrados no catálogo: ${preview}${suffix}`, {
+          duration: 8000,
+        });
+      }
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleMarkExportedFilePick = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      markExportedMutation.mutate({ fileBase64: dataUrl });
+    };
+    reader.onerror = () => toast.error("Erro ao ler o arquivo");
+    reader.readAsDataURL(file);
+  };
+
   const exportTrayMutation = trpc.catalog.exportTrayImport.useMutation({
     onSuccess: (res) => {
       const skipped = res.skipped ?? [];
@@ -923,6 +959,28 @@ export default function CatalogPage() {
                 title="Marca os selecionados como já importados na Tray com as variações cadastradas na loja"
               >
                 {updateStatusMutation.isPending ? "..." : "Marcar como cadastrado"}
+              </Button>
+
+              <div className="h-6 w-px bg-[#E9E7E2]" />
+
+              <input
+                ref={markExportedInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(e) => {
+                  handleMarkExportedFilePick(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                variant="outline"
+                className={GHOST_BTN_CLASS}
+                disabled={markExportedMutation.isPending}
+                onClick={() => markExportedInputRef.current?.click()}
+                title="Suba a planilha de produtos exportada pela Tray (CSV ou XLSX) — todo SKU com 'Código produto' preenchido é marcado como Cadastrado na Tray, sem precisar selecionar um por um."
+              >
+                {markExportedMutation.isPending ? "..." : "Marcar cadastrados (planilha Tray)"}
               </Button>
             </div>
 
