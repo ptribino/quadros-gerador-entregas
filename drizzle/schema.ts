@@ -158,6 +158,11 @@ export const products = mysqlTable(
     genStep: int("genStep"), // 1..3 — última etapa concluída pelo worker
     genAttempts: int("genAttempts").default(0).notNull(),
     genError: text("genError"),
+    // ID do lote de geração (um por clique em "Gerar variações"/enqueue).
+    // Usado só pra escopar a barra de progresso da UI ao lote atual, sem
+    // misturar itens prontos/com erro de levas anteriores. Ver
+    // generationStatus em catalogRouter.ts.
+    genBatchId: varchar("genBatchId", { length: 36 }),
     // Estilo escolhido manualmente na fila (opcional). Nulo = usa o padrão
     // de marca goquadros_signature.
     genStyleOverride: varchar("genStyleOverride", { length: 32 }),

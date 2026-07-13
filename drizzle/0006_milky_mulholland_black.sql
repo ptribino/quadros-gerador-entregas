@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `genBatchId` varchar(36);

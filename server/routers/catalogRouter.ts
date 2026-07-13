@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
@@ -1073,6 +1074,10 @@ export const catalogRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const db = await requireDb();
+      // Um ID novo por leva — permite que a barra de progresso da UI
+      // (generationStatus) mostre só o andamento deste lote, sem misturar
+      // com prontos/erros de levas anteriores.
+      const batchId = crypto.randomUUID();
       // Apenas produtos do próprio usuário, aprovados ou com erro/idle e
       // que ainda não estejam em processamento.
       await db
@@ -1084,6 +1089,7 @@ export const catalogRouter = router({
           genStep: null,
           genError: null,
           genAttempts: 0,
+          genBatchId: batchId,
           genStyleOverride: input.styleOverride ?? null,
         })
         .where(
@@ -1134,14 +1140,39 @@ export const catalogRouter = router({
         genStep: products.genStep,
         genError: products.genError,
         genAttempts: products.genAttempts,
+        genBatchId: products.genBatchId,
       })
       .from(products)
       .where(eq(products.userId, ctx.user.id));
-    const queued = rows.filter((r) => r.genQueuedAt && !r.genStartedAt && !r.genCompletedAt).length;
-    const running = rows.filter((r) => r.genStartedAt && !r.genCompletedAt).length;
-    const done = rows.filter((r) => r.status === "generated" || (r.genCompletedAt && !r.genError)).length;
-    const errored = rows.filter((r) => r.genError && r.genCompletedAt).length;
-    return { queued, running, done, errored, total: rows.length };
+
+    // Escopa a contagem só ao lote de "Gerar variações" mais recente, pra
+    // não misturar prontos/erros de levas anteriores na barra de progresso.
+    // O lote atual é identificado pelo genBatchId cujo enqueue (genQueuedAt)
+    // é o mais recente entre os produtos que passaram pela fila.
+    const latestQueuedAtByBatch = new Map<string, number>();
+    for (const r of rows) {
+      if (!r.genBatchId || !r.genQueuedAt) continue;
+      const t = r.genQueuedAt.getTime();
+      const cur = latestQueuedAtByBatch.get(r.genBatchId);
+      if (cur === undefined || t > cur) latestQueuedAtByBatch.set(r.genBatchId, t);
+    }
+    let currentBatchId: string | null = null;
+    let latest = -Infinity;
+    for (const [batchId, t] of Array.from(latestQueuedAtByBatch)) {
+      if (t > latest) {
+        latest = t;
+        currentBatchId = batchId;
+      }
+    }
+    // Produtos gerados antes desta feature (genBatchId nulo) não entram na
+    // barra — ficam só no fallback do card antigo, se existir.
+    const batchRows = currentBatchId ? rows.filter((r) => r.genBatchId === currentBatchId) : [];
+
+    const queued = batchRows.filter((r) => r.genQueuedAt && !r.genStartedAt && !r.genCompletedAt).length;
+    const running = batchRows.filter((r) => r.genStartedAt && !r.genCompletedAt).length;
+    const done = batchRows.filter((r) => r.status === "generated" || (r.genCompletedAt && !r.genError)).length;
+    const errored = batchRows.filter((r) => r.genError && r.genCompletedAt).length;
+    return { queued, running, done, errored, total: batchRows.length };
   }),
 
   /**
