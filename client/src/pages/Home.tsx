@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Loader2, Zap, LogIn, LogOut, Image as ImageIcon, Film, Layout, FolderOpen, Link as LinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,6 +12,7 @@ import { trpc } from '@/lib/trpc';
 import { Input } from '@/components/ui/input';
 import ImageSelector from '@/components/ImageSelector';
 import GenerationResults from '@/components/GenerationResults';
+import { FONT_SANS, FIELD_LABEL_CLASS, FIELD_INPUT_CLASS, GHOST_BTN_CLASS, PRIMARY_BTN_CLASS } from '@/lib/designTokens';
 
 type DeliveryType = 'lifestyle' | 'mockup' | 'video';
 type FrameType = 'light_wood' | 'dark_wood' | 'white' | 'black';
@@ -247,14 +250,14 @@ export default function Home() {
   // Gate de login: se não autenticado, mostra tela de login
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 p-8">
+      <div className="min-h-screen bg-[#EEECE7] flex flex-col items-center justify-center gap-6 p-8" style={FONT_SANS}>
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-foreground">Quadros — Gerador de Entregas</h1>
-          <p className="text-muted-foreground">Gere imagens e vídeos para e-commerce de quadros decorativos</p>
+          <h1 className="text-[26px] font-extrabold tracking-[-0.01em] text-[#1C1B1A]">Quadros — Gerador de Entregas</h1>
+          <p className="text-[13.5px] text-[#8A8680]">Gere imagens e vídeos para e-commerce de quadros decorativos</p>
         </div>
         <Button
           onClick={() => { window.location.href = getLoginUrl(); }}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-lg rounded-xl"
+          className={`flex items-center gap-2 px-8 py-6 text-lg rounded-[9px] ${PRIMARY_BTN_CLASS}`}
         >
           <LogIn className="w-5 h-5" />
           Entrar com Google
@@ -264,197 +267,202 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b border-border bg-white p-4 md:p-6">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
+    <div className="min-h-screen bg-[#EEECE7] py-8" style={FONT_SANS}>
+      <div className="mx-auto max-w-[1024px] overflow-hidden rounded-[14px] border border-black/[.08] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06)]">
+        {/* Header */}
+        <header className="flex items-start justify-between border-b border-[#EEEDEA] px-8 py-[26px]">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Quadros — Gerador de Entregas</h1>
-            <p className="text-sm text-muted-foreground">Gere imagens e vídeos para e-commerce de quadros decorativos</p>
+            <h1 className="m-0 text-[22px] font-extrabold tracking-[-0.01em] text-[#1C1B1A]">
+              Quadros — Gerador de Entregas
+            </h1>
+            <p className="mt-1.5 text-[13.5px] text-[#8A8680]">
+              Gere imagens e vídeos para e-commerce de quadros decorativos
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Button
               onClick={() => (window.location.href = "/catalogo")}
               variant="outline"
-              size="sm"
+              className={GHOST_BTN_CLASS}
             >
               Curadoria de catálogo →
             </Button>
-            <span className="text-sm text-muted-foreground hidden md:inline">
+            <span className="text-[13px] text-[#8A8680] hidden md:inline">
               {user?.name || user?.email}
             </span>
             <Button
               onClick={() => logout()}
               variant="outline"
-              size="sm"
-              className="flex items-center gap-1"
+              className={`${GHOST_BTN_CLASS} flex items-center gap-1`}
             >
               <LogOut className="w-4 h-4" />
               Sair
             </Button>
           </div>
-        </div>
-      </div>
+        </header>
 
-      {/* Main Content */}
-      <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-8">
+        {/* Main Content */}
+        <div className="px-8 py-7 space-y-6">
 
-        {/* Step 1: Upload da Arte */}
-        <Card className="p-6 bg-white border border-border">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">1</span>
-            <h2 className="text-lg font-semibold text-foreground">Carregue a arte original</h2>
-          </div>
-          <div className="max-w-sm">
-            <ImageSelector
-              onImageSelect={(url, fileName) =>
-                setSelectedImage(url ? { url, fileName } : undefined)
-              }
-              selectedImage={selectedImage}
-            />
-          </div>
-        </Card>
-
-        {/* Step 2: Tipo de Entrega */}
-        <Card className="p-6 bg-white border border-border">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">2</span>
-            <h2 className="text-lg font-semibold text-foreground">Selecione o tipo de entrega</h2>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {deliveryOptions.map((option) => {
-              const Icon = option.icon;
-              const isSelected = deliveryType === option.value;
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => setDeliveryType(option.value)}
-                  className={`p-4 rounded-lg border-2 text-left transition-all ${
-                    isSelected
-                      ? 'border-primary bg-primary/5'
-                      : 'border-border hover:border-primary/40'
-                  }`}
-                >
-                  <Icon className={`w-6 h-6 mb-2 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <p className={`text-sm font-semibold ${isSelected ? 'text-primary' : 'text-foreground'}`}>
-                    {option.label}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">{option.desc}</p>
-                </button>
-              );
-            })}
-          </div>
-        </Card>
-
-        {/* Step 3: Opções */}
-        <Card className="p-6 bg-white border border-border">
-          <div className="flex items-center gap-3 mb-4">
-            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">3</span>
-            <h2 className="text-lg font-semibold text-foreground">Configure as opções</h2>
+          {/* Step 1: Upload da Arte */}
+          <div className="rounded-[10px] border border-[#EEEDEA] bg-[#FCFCFB] p-[22px_24px]">
+            <div className="flex items-center gap-3 mb-[18px]">
+              <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-[#4338CA] text-[12px] font-bold text-white">1</span>
+              <h2 className="m-0 text-[14.5px] font-extrabold text-[#1C1B1A]">Carregue a arte original</h2>
+            </div>
+            <div className="max-w-sm">
+              <ImageSelector
+                onImageSelect={(url, fileName) =>
+                  setSelectedImage(url ? { url, fileName } : undefined)
+                }
+                selectedImage={selectedImage}
+              />
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Tipo de Moldura */}
-            <div className="space-y-3">
-              <label className="block text-sm font-semibold text-foreground">Tipo de Moldura</label>
-              <div className="space-y-2">
-                {[
-                  { value: 'light_wood' as const, label: 'Amadeirado Claro' },
-                  { value: 'dark_wood' as const, label: 'Amadeirado Escuro' },
-                  { value: 'white' as const, label: 'Branca' },
-                  { value: 'black' as const, label: 'Preta' },
-                ].map((option) => (
-                  <label key={option.value} className="flex items-center space-x-3 cursor-pointer group">
-                    <input
-                      type="radio"
-                      name="frame"
-                      value={option.value}
-                      checked={frameType === option.value}
-                      onChange={(e) => setFrameType(e.target.value as FrameType)}
-                      className="w-4 h-4 accent-primary"
-                    />
-                    <span className="text-sm text-foreground group-hover:text-primary transition-colors">
+          {/* Step 2: Tipo de Entrega */}
+          <div className="rounded-[10px] border border-[#EEEDEA] bg-[#FCFCFB] p-[22px_24px]">
+            <div className="flex items-center gap-3 mb-[18px]">
+              <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-[#4338CA] text-[12px] font-bold text-white">2</span>
+              <h2 className="m-0 text-[14.5px] font-extrabold text-[#1C1B1A]">Selecione o tipo de entrega</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {deliveryOptions.map((option) => {
+                const Icon = option.icon;
+                const isSelected = deliveryType === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => setDeliveryType(option.value)}
+                    className={`rounded-[8px] border p-4 text-left transition-colors ${
+                      isSelected
+                        ? 'border-[#4338CA] bg-[#F5F5FF]'
+                        : 'border-[#E2E0DB] bg-white hover:border-[#4338CA]/40'
+                    }`}
+                  >
+                    <Icon className={`w-6 h-6 mb-2 ${isSelected ? 'text-[#4338CA]' : 'text-[#8A8680]'}`} />
+                    <p className={`text-[13.5px] font-bold ${isSelected ? 'text-[#4338CA]' : 'text-[#1C1B1A]'}`}>
                       {option.label}
-                    </span>
-                  </label>
-                ))}
-              </div>
+                    </p>
+                    <p className="text-[12px] text-[#8A8680] mt-1">{option.desc}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Step 3: Opções */}
+          <div className="rounded-[10px] border border-[#EEEDEA] bg-[#FCFCFB] p-[22px_24px]">
+            <div className="flex items-center gap-3 mb-[18px]">
+              <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-[#4338CA] text-[12px] font-bold text-white">3</span>
+              <h2 className="m-0 text-[14.5px] font-extrabold text-[#1C1B1A]">Configure as opções</h2>
             </div>
 
-            {/* Ambiente + Estilo (empilhados na coluna da direita) — Lifestyle e Vídeo */}
-            {(deliveryType === 'lifestyle' || deliveryType === 'video') && (
-              <div className="space-y-6">
-                <div className="space-y-3">
-                  <label className="block text-sm font-semibold text-foreground">Ambiente (cômodo)</label>
-                  <select
-                    value={roomType}
-                    onChange={(e) => setRoomType(e.target.value as RoomType)}
-                    className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    {ROOM_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Tipo de Moldura */}
+              <div>
+                <Label className={FIELD_LABEL_CLASS}>Tipo de Moldura</Label>
+                <RadioGroup
+                  value={frameType}
+                  onValueChange={(v) => setFrameType(v as FrameType)}
+                  className="gap-2.5"
+                >
+                  {[
+                    { value: 'light_wood' as const, label: 'Amadeirado Claro' },
+                    { value: 'dark_wood' as const, label: 'Amadeirado Escuro' },
+                    { value: 'white' as const, label: 'Branca' },
+                    { value: 'black' as const, label: 'Preta' },
+                  ].map((option) => (
+                    <label key={option.value} className="flex items-center gap-2.5 cursor-pointer group">
+                      <RadioGroupItem
+                        value={option.value}
+                        className="border-[#D9D6CF] text-[#4338CA] data-[state=checked]:border-[#4338CA] [&_svg]:fill-[#4338CA]"
+                      />
+                      <span className="text-[13.5px] text-[#1C1B1A] group-hover:text-[#4338CA] transition-colors">
                         {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-3">
-                  <label className="block text-sm font-semibold text-foreground">Estilo de Decoração</label>
-                  <select
-                    value={styleType}
-                    onChange={(e) => setStyleType(e.target.value as StyleType)}
-                    className="w-full px-3 py-2 text-sm border border-border rounded-md bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    {STYLE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                      </span>
+                    </label>
+                  ))}
+                </RadioGroup>
               </div>
-            )}
+
+              {/* Ambiente + Estilo (empilhados na coluna da direita) — Lifestyle e Vídeo */}
+              {(deliveryType === 'lifestyle' || deliveryType === 'video') && (
+                <div className="space-y-5">
+                  <div>
+                    <Label className={FIELD_LABEL_CLASS}>Ambiente (cômodo)</Label>
+                    <Select value={roomType} onValueChange={(v) => setRoomType(v as RoomType)}>
+                      <SelectTrigger className={FIELD_INPUT_CLASS}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ROOM_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={FIELD_LABEL_CLASS}>Estilo de Decoração</Label>
+                    <Select value={styleType} onValueChange={(v) => setStyleType(v as StyleType)}>
+                      <SelectTrigger className={FIELD_INPUT_CLASS}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STYLE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </Card>
 
-        {/* Generate Button */}
-        <div className="flex justify-center">
-          <Button
-            onClick={handleGenerate}
-            disabled={!selectedImage?.url || isGenerating}
-            className="px-12 py-6 text-lg bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-3 rounded-xl"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                {deliveryType === 'video' ? 'Gerando vídeo (pode levar até 2 min)...' : 'Gerando entrega...'}
-              </>
-            ) : (
-              <>
-                <Zap className="w-5 h-5" />
-                Gerar {deliveryType === 'lifestyle' ? 'Ambiente' : deliveryType === 'mockup' ? 'Mockup' : 'Vídeo'}
-              </>
-            )}
-          </Button>
-        </div>
+          {/* Generate Button */}
+          <div className="flex justify-center pt-2">
+            <Button
+              onClick={handleGenerate}
+              disabled={!selectedImage?.url || isGenerating}
+              className={`px-12 py-6 text-[15px] font-bold flex items-center gap-3 rounded-[9px] ${PRIMARY_BTN_CLASS}`}
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  {deliveryType === 'video' ? 'Gerando vídeo (pode levar até 2 min)...' : 'Gerando entrega...'}
+                </>
+              ) : (
+                <>
+                  <Zap className="w-5 h-5" />
+                  Gerar {deliveryType === 'lifestyle' ? 'Ambiente' : deliveryType === 'mockup' ? 'Mockup' : 'Vídeo'}
+                </>
+              )}
+            </Button>
+          </div>
 
-        {/* Results */}
-        {(generatedItems.length > 0 || isGenerating) && (
-          <GenerationResults
-            images={generatedItems}
-            isLoading={isGenerating}
-            onSaveToGoogleDrive={handleSaveToGoogleDrive}
-            onDownload={handleDownload}
-            onReset={() => {
-              setGeneratedItems([]);
-              setSelectedImage(undefined);
-            }}
-          />
-        )}
+          {/* Results */}
+          {(generatedItems.length > 0 || isGenerating) && (
+            <GenerationResults
+              images={generatedItems}
+              isLoading={isGenerating}
+              onSaveToGoogleDrive={handleSaveToGoogleDrive}
+              onDownload={handleDownload}
+              onReset={() => {
+                setGeneratedItems([]);
+                setSelectedImage(undefined);
+              }}
+            />
+          )}
 
-        {/* Footer */}
-        <div className="text-center text-xs text-muted-foreground py-4 border-t border-border">
-          <p>A fidelidade absoluta à arte original é mantida em todas as gerações.</p>
+          {/* Footer */}
+          <div className="text-center text-[12px] text-[#8A8680] py-4 border-t border-[#EEEDEA]">
+            <p>A fidelidade absoluta à arte original é mantida em todas as gerações.</p>
+          </div>
         </div>
       </div>
 

@@ -22,6 +22,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
+import { FONT_SANS, FONT_MONO, FIELD_LABEL_CLASS, FIELD_INPUT_CLASS, GHOST_BTN_CLASS } from "@/lib/designTokens";
 
 /** Miniatura autenticada de um arquivo do banco do Drive (ver server/_core/driveThumbProxy.ts). */
 function DriveThumb({ fileId, name }: { fileId: string; name: string }) {
@@ -114,20 +115,6 @@ const GEN_RANK: Record<GenFilter, number> = {
   failed: 3,
   generated: 4,
 };
-
-// ---------- Design tokens (redesign "Curadoria de Catálogo" — handoff 2026-07-10) ----------
-// Escopo desta tela apenas — não mexe no tema global (client/src/index.css), que é
-// compartilhado com Home.tsx. Ver detalhes no plano de implementação.
-
-const FONT_SANS: React.CSSProperties = { fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" };
-const FONT_MONO: React.CSSProperties = { fontFamily: "'JetBrains Mono', ui-monospace, monospace" };
-
-const FIELD_LABEL_CLASS =
-  "mb-[7px] block text-[11.5px] font-bold uppercase tracking-[0.02em] text-[#8A8680]";
-const FIELD_INPUT_CLASS =
-  "h-auto w-full rounded-[7px] border-[#E2E0DB] bg-white px-[11px] py-[9px] text-[13.5px] text-[#1C1B1A] shadow-none focus-visible:border-[#4338CA] focus-visible:ring-[#4338CA]/30";
-const GHOST_BTN_CLASS =
-  "rounded-[7px] border border-[#E2E0DB] bg-white px-3.5 py-2 text-[13px] font-semibold text-[#57534E] hover:bg-[#F7F6F4] disabled:bg-[#F1F0EE] disabled:text-[#B4B0A8] disabled:opacity-100 disabled:border-[#E2E0DB]";
 
 /** Paleta rotativa pra miniatura quando o produto não tem imagem de origem (sourceDriveFileId). */
 const THUMB_FALLBACK_COLORS = ["#F3E8D8", "#E4E9F7", "#E9E4F7", "#DDEFE7", "#F7E4E4"];
