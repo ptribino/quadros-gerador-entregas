@@ -279,7 +279,6 @@ const TRAY_EXPORT_DEFAULTS = {
   comprimentoCm: 65,
   larguraCm: 45,
   alturaCm: 9,
-  mensagemAdicional: "Este quadro não possui opção de acabamento com vidro.",
   quandoAcabarEstoque: QUANDO_ACABAR_ESTOQUE,
 } as const;
 
@@ -909,7 +908,11 @@ export const catalogRouter = router({
           catN2: c?.traySubcategoria ?? "",
           catN3: nivel3 ?? "",
           naLoja: p.exibirNaLoja ? "Sim" : "Não",
-          mensagemAdicional: TRAY_EXPORT_DEFAULTS.mensagemAdicional,
+          // Coluna mantida (posição fixa — ver nota da Tray casar por
+          // posição, não nome, logo abaixo) mas sem valor por pedido da
+          // Priscila em 2026-07-13; retirar a coluna deslocaria tudo depois
+          // dela, então só deixamos a célula em branco.
+          mensagemAdicional: "",
           quandoAcabarEstoque: TRAY_EXPORT_DEFAULTS.quandoAcabarEstoque,
           ...catAdic,
         });
