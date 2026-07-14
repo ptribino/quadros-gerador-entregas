@@ -391,7 +391,7 @@ export const catalogRouter = router({
       });
       const slice = input.all ? files : files.slice(0, input.count);
       if (slice.length === 0) {
-        return { processed: 0, succeeded: 0, failed: 0, skipped: 0, errors: [] };
+        return { processed: 0, succeeded: 0, failed: 0, skipped: 0, errors: [], skippedFiles: [] };
       }
 
       // Calcula próximo seq (continua a sequência global por categoria) e
@@ -405,18 +405,24 @@ export const catalogRouter = router({
       const usedNames = new Set(existing.map((e) => e.nome.trim().toLowerCase()));
 
       const errors: { fileName: string; reason: string }[] = [];
+      const skippedFiles: { fileName: string; existingSku: string; existingStatus: string }[] = [];
       let succeeded = 0;
       let skipped = 0;
 
       for (const file of slice) {
         // Skip se já existe sugestão pra esse arquivo (idempotência)
         const dup = await db
-          .select({ id: products.id })
+          .select({ id: products.id, sku: products.sku, status: products.status })
           .from(products)
           .where(and(eq(products.sourceDriveFileId, file.id), eq(products.userId, ctx.user.id)))
           .limit(1);
         if (dup.length > 0) {
           skipped += 1;
+          skippedFiles.push({
+            fileName: file.name,
+            existingSku: dup[0].sku,
+            existingStatus: dup[0].status,
+          });
           continue;
         }
 
@@ -492,6 +498,7 @@ export const catalogRouter = router({
         failed: errors.length,
         skipped,
         errors,
+        skippedFiles,
       };
     }),
 

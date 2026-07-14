@@ -215,6 +215,12 @@ export default function CatalogPage() {
       if (res.errors.length > 0) {
         console.error("[catalog] Falhas:", res.errors);
       }
+      if (res.skippedFiles.length > 0) {
+        console.info(
+          "[catalog] Puladas por já ter produto (independente do status):",
+          res.skippedFiles,
+        );
+      }
       utils.catalog.listSuggestions.invalidate();
     },
     onError: (err) => toast.error(err.message),
