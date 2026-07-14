@@ -148,18 +148,31 @@ export async function analyzeImageForCatalog(args: {
     },
   };
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini API erro ${response.status}: ${errText.slice(0, 300)}`);
+  // 503/429 do Gemini costumam ser transitórios (sobrecarga momentânea) —
+  // sem retry, uma pasta com 50 imagens obrigava reprocessar manualmente
+  // a única que deu erro nesse tipo de pico.
+  const RETRYABLE_STATUS = new Set([429, 503]);
+  const MAX_ATTEMPTS = 3;
+  let response: Response | undefined;
+  let lastErrText = "";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (response.ok) break;
+    lastErrText = await response.text();
+    if (!RETRYABLE_STATUS.has(response.status) || attempt === MAX_ATTEMPTS) break;
+    await new Promise((r) => setTimeout(r, attempt * 1000));
   }
 
-  const result = (await response.json()) as {
+  const finalResponse = response!;
+  if (!finalResponse.ok) {
+    throw new Error(`Gemini API erro ${finalResponse.status}: ${lastErrText.slice(0, 300)}`);
+  }
+
+  const result = (await finalResponse.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
 
