@@ -154,8 +154,13 @@ async function enqueueTick(db: Db, p: mysql.Pool): Promise<boolean> {
       })
       .where(eq(products.id, product.id));
 
-    await db.insert(productGenTasks).values(
-      prepared.phaseATasks.map((spec) => ({
+    // Uma linha por INSERT, não um multi-row insert — cada referenceImageB64
+    // já vem comprimido (≤1MB binário, ~1.4MB em base64; ver prepareProduct),
+    // mas 3 delas somadas num único INSERT ainda beiravam o max_allowed_packet
+    // do MySQL (default histórico de 4MB) e derrubavam as 3 tasks de uma vez.
+    // Uma linha por vez fica bem abaixo de qualquer limite razoável.
+    for (const spec of prepared.phaseATasks) {
+      await db.insert(productGenTasks).values({
         productId: product.id,
         phase: "a" as const,
         kind: spec.kind,
@@ -164,8 +169,8 @@ async function enqueueTick(db: Db, p: mysql.Pool): Promise<boolean> {
         referenceImageB64: spec.referenceImageB64,
         referenceMimeType: spec.referenceMimeType,
         aspectRatio: spec.aspectRatio,
-      })),
-    );
+      });
+    }
 
     console.log(`[catalogWorker] #${product.id} — fase A criada (3 tasks)`);
     return true;
@@ -308,8 +313,11 @@ async function advanceProductIfReady(db: Db, p: mysql.Pool, productId: number): 
     }
 
     const phaseBSpecs = buildPhaseBTasks(genParams, mockupBase.resultB64, mockupBase.resultMimeType);
-    await db.insert(productGenTasks).values(
-      phaseBSpecs.map((spec) => ({
+    // Uma linha por INSERT — mesmo motivo da fase A (ver comentário lá):
+    // evita somar 3 cópias de referenceImageB64 num único multi-row insert
+    // e estourar o max_allowed_packet do MySQL.
+    for (const spec of phaseBSpecs) {
+      await db.insert(productGenTasks).values({
         productId,
         phase: "b" as const,
         kind: spec.kind,
@@ -318,8 +326,8 @@ async function advanceProductIfReady(db: Db, p: mysql.Pool, productId: number): 
         referenceImageB64: spec.referenceImageB64,
         referenceMimeType: spec.referenceMimeType,
         aspectRatio: spec.aspectRatio,
-      })),
-    );
+      });
+    }
     await db.update(products).set({ genPhase: "b" }).where(eq(products.id, productId));
     console.log(`[catalogWorker] #${productId} — fase A concluída, iniciando fase B (recolors)`);
     return;
