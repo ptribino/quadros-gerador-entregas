@@ -233,10 +233,9 @@ export async function prepareProduct(
   void lifestyleFolder;
   void mockupFolder;
 
-  // Baixar original e ter como base64 pra usar como referência nas gerações
+  // Baixar original pra salvar sem resize e detectar orientação.
   const originalBuffer = await googleDriveService.downloadFile(accessToken, product.sourceDriveFileId);
   const originalMime = product.sourceDriveMimeType || "image/jpeg";
-  const originalB64 = originalBuffer.toString("base64");
 
   // Orientação real da arte (largura vs altura) — quadros horizontais (ex:
   // obras clássicas tipo "Santa Ceia") precisam ser apresentados em paisagem
@@ -267,6 +266,17 @@ export async function prepareProduct(
     hdFolder.id,
   );
   await googleDriveService.makePublic(accessToken, originalWebFile.id);
+
+  // Referência enviada ao Gemini e gravada em product_gen_tasks: usa a
+  // versão comprimida (≤1MB, mesma do upload "web" acima), não o arquivo
+  // original — a fase A insere 3 tasks numa única query, cada uma com sua
+  // própria cópia da referência, e um original grande (comum em arte de
+  // impressão) estourava o max_allowed_packet do MySQL, derrubando o
+  // produto inteiro com "Failed query: insert into product_gen_tasks...".
+  // 2500px/≤1MB é resolução de sobra pra um modelo de visão usar como
+  // referência de estilo/conteúdo.
+  const referenceB64 = originalWeb.buffer.toString("base64");
+  const referenceMime = originalWeb.mimeType;
 
   // Padrão de marca: as duas lifestyles usam o estilo único goquadros_signature,
   // pra manter o sortimento visualmente coeso com goquadros.com.br. Se o
@@ -301,23 +311,23 @@ export async function prepareProduct(
     {
       kind: "lifestyle_regular",
       prompt: promptAgentService.getPrompt("lifestyle", frame, regularRoom, regularStyle, orientation),
-      referenceImageB64: originalB64,
-      referenceMimeType: originalMime,
+      referenceImageB64: referenceB64,
+      referenceMimeType: referenceMime,
       aspectRatio,
     },
     {
       kind: "lifestyle_pro",
       prompt: promptAgentService.getPrompt("lifestyle", frame, proRoom, proStyle, orientation),
-      referenceImageB64: originalB64,
-      referenceMimeType: originalMime,
+      referenceImageB64: referenceB64,
+      referenceMimeType: referenceMime,
       aspectRatio,
     },
     {
       kind: "mockup_base",
       frameColor: frame,
       prompt: promptAgentService.getPrompt("mockup", frame, orientation),
-      referenceImageB64: originalB64,
-      referenceMimeType: originalMime,
+      referenceImageB64: referenceB64,
+      referenceMimeType: referenceMime,
       aspectRatio,
     },
   ];
