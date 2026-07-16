@@ -10,7 +10,7 @@ import { analyzeImageForCatalog, buildSku, buildSlug } from "../services/catalog
 import { roomsForCategory } from "../services/catalogPipeline";
 import { buildAdditionalCategoryIds, detectNivel3 } from "../services/trayCategoryIds";
 import { getDb } from "../db";
-import { categoryCodes, products, productStatusEnum } from "../../drizzle/schema";
+import { categoryCodes, products, productStatusEnum, traySyncedNames } from "../../drizzle/schema";
 import { ENV } from "../_core/env";
 
 // Mesmo conjunto de StyleType do promptAgentService — repetido como tupla
@@ -240,6 +240,153 @@ async function parseTraySkuTrayIdPairs(
   return { pairs, skippedSkus };
 }
 
+type TrayCatalogNameEntry = { nome: string; slugSeo: string | null; referencia: string | null };
+
+/**
+ * Extrai {nome, slugSeo, referencia} de cada linha da planilha de produtos
+ * exportada pela Tray (mesmo arquivo usado em `markExportedFromTray` /
+ * `exportTrayVariations`, que já tem as colunas "Nome produto" e "Endereço
+ * do Produto (URL Tray)"). Usada por `syncTrayCatalogNames` pra alimentar a
+ * checagem de duplicidade de `generateSuggestions` com produtos que já
+ * existem na loja mas nunca passaram por este app (cadastro manual, ou
+ * anterior à automação) — sem isso o dedup só enxerga o que este app já
+ * gerou, e a IA pode sugerir nome/URL que colide silenciosamente só na hora
+ * de importar na Tray.
+ */
+async function parseTrayCatalogNames(buffer: Buffer): Promise<TrayCatalogNameEntry[]> {
+  const isXlsx =
+    buffer.length >= 4 &&
+    buffer[0] === 0x50 &&
+    buffer[1] === 0x4b &&
+    (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07);
+
+  const isNomeHeader = (s: string) => {
+    const t = s.trim().toLowerCase();
+    return t === "nome produto" || t === "nome do produto";
+  };
+  const isUrlHeader = (s: string) => s.trim().toLowerCase().includes("endereço do produto");
+  const isRefHeader = (s: string) => s.trim().toLowerCase().startsWith("referência");
+
+  const slugFromCell = (raw: string): string | null => {
+    const t = raw.trim();
+    if (!t) return null;
+    const lastSegment = t.split("/").filter(Boolean).pop();
+    return (lastSegment ?? t).toLowerCase();
+  };
+
+  const entries: TrayCatalogNameEntry[] = [];
+  const HEADER_SEARCH_ROWS = 5;
+
+  if (isXlsx) {
+    const wbIn = new ExcelJS.Workbook();
+    try {
+      const ab = buffer.buffer.slice(
+        buffer.byteOffset,
+        buffer.byteOffset + buffer.byteLength,
+      ) as ArrayBuffer;
+      await wbIn.xlsx.load(ab);
+    } catch {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "Arquivo XLSX inválido. Exporte a planilha de produtos no painel da Tray (CSV ou XLSX) e tente novamente.",
+      });
+    }
+    const ws = wbIn.worksheets[0];
+    if (!ws) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Planilha vazia — nenhuma aba encontrada." });
+    }
+    let nomeCol = -1;
+    let urlCol = -1;
+    let refCol = -1;
+    let headerRowNumber = -1;
+    for (let r = 1; r <= Math.min(HEADER_SEARCH_ROWS, ws.rowCount); r++) {
+      const row = ws.getRow(r);
+      let foundNome = -1;
+      let foundUrl = -1;
+      let foundRef = -1;
+      row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        const text = String(cell.value ?? "");
+        if (isNomeHeader(text)) foundNome = colNumber;
+        if (isUrlHeader(text)) foundUrl = colNumber;
+        if (isRefHeader(text)) foundRef = colNumber;
+      });
+      if (foundNome !== -1) {
+        nomeCol = foundNome;
+        urlCol = foundUrl;
+        refCol = foundRef;
+        headerRowNumber = r;
+        break;
+      }
+    }
+    if (nomeCol === -1) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "Não achei a coluna 'Nome produto' no cabeçalho. Confirme que é a planilha de produtos exportada pela Tray.",
+      });
+    }
+    for (let r = headerRowNumber + 1; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r);
+      const nome = String(row.getCell(nomeCol).value ?? "").trim();
+      if (!nome) continue;
+      const slugSeo = urlCol !== -1 ? slugFromCell(String(row.getCell(urlCol).value ?? "")) : null;
+      const referencia = refCol !== -1 ? String(row.getCell(refCol).value ?? "").trim() || null : null;
+      entries.push({ nome, slugSeo, referencia });
+    }
+  } else {
+    let text: string;
+    try {
+      text = new TextDecoder("windows-1252").decode(buffer);
+    } catch {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Não consegui ler o arquivo. Use o CSV ou XLSX de produtos exportado pelo painel da Tray.",
+      });
+    }
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+
+    const rows = parseCsvSemicolon(text);
+    if (rows.length < 2) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "CSV sem linhas de dados. Verifique se exportou o arquivo certo.",
+      });
+    }
+    let nomeCol = -1;
+    let urlCol = -1;
+    let refCol = -1;
+    let headerRowIndex = -1;
+    for (let r = 0; r < Math.min(HEADER_SEARCH_ROWS, rows.length); r++) {
+      const foundNome = rows[r].findIndex(isNomeHeader);
+      if (foundNome !== -1) {
+        nomeCol = foundNome;
+        urlCol = rows[r].findIndex(isUrlHeader);
+        refCol = rows[r].findIndex(isRefHeader);
+        headerRowIndex = r;
+        break;
+      }
+    }
+    if (nomeCol === -1) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message:
+          "Não achei a coluna 'Nome produto' no cabeçalho. Confirme que é a planilha de produtos exportada pela Tray.",
+      });
+    }
+    for (let r = headerRowIndex + 1; r < rows.length; r++) {
+      const row = rows[r];
+      const nome = (row[nomeCol] ?? "").trim();
+      if (!nome) continue;
+      const slugSeo = urlCol !== -1 ? slugFromCell(row[urlCol] ?? "") : null;
+      const referencia = refCol !== -1 ? (row[refCol] ?? "").trim() || null : null;
+      entries.push({ nome, slugSeo, referencia });
+    }
+  }
+
+  return entries;
+}
+
 /**
  * Transforma URLs antigas salvas no DB (formato `uc?export=download&id=...`)
  * em URLs do proxy `/img/<id>.jpg` que a Tray aceita. Sem isso, produtos
@@ -280,6 +427,8 @@ const TRAY_EXPORT_DEFAULTS = {
   larguraCm: 45,
   alturaCm: 9,
   quandoAcabarEstoque: QUANDO_ACABAR_ESTOQUE,
+  // NCM fixo pra toda a loja — confirmado com a Priscila em 2026-07-15.
+  ncm: "49119190",
 } as const;
 
 async function requireDb() {
@@ -398,11 +547,34 @@ export const catalogRouter = router({
       // monta o set de nomes já usados nessa categoria pra evitar sugestões
       // duplicadas (o Gemini recebe essa lista e evita repetir).
       const existing = await db
-        .select({ sku: products.sku, nome: products.nome })
+        .select({ sku: products.sku, nome: products.nome, slugSeo: products.slugSeo })
         .from(products)
         .where(eq(products.categoryCodeId, category.id));
       let nextSeq = existing.length + 1;
       const usedNames = new Set(existing.map((e) => e.nome.trim().toLowerCase()));
+      const usedSlugs = new Set(
+        existing
+          .map((e) => e.slugSeo?.trim().toLowerCase())
+          .filter((s): s is string => !!s),
+      );
+
+      // Nomes/URLs já cadastrados na loja Tray de verdade, mas que nunca
+      // passaram por este app (cadastro manual, ou anterior à automação) —
+      // sincronizados via `syncTrayCatalogNames`. Sem isso o dedup acima só
+      // enxerga o que este app já gerou, e a IA pode sugerir nome (ou nome
+      // diferente que gera a mesma URL) que colide silenciosamente só na
+      // hora de importar na Tray. Store-wide, não filtrado por categoria —
+      // a URL da Tray é única na loja toda.
+      const synced = await db
+        .select({ nome: traySyncedNames.nome, slugSeo: traySyncedNames.slugSeo })
+        .from(traySyncedNames);
+      for (const s of synced) {
+        usedNames.add(s.nome.trim().toLowerCase());
+        if (s.slugSeo) usedSlugs.add(s.slugSeo.trim().toLowerCase());
+      }
+
+      const collides = (nome: string) =>
+        usedNames.has(nome.trim().toLowerCase()) || usedSlugs.has(buildSlug(nome).toLowerCase());
 
       const errors: { fileName: string; reason: string }[] = [];
       const skippedFiles: { fileName: string; existingSku: string; existingStatus: string }[] = [];
@@ -442,7 +614,7 @@ export const catalogRouter = router({
 
           // Se o nome colidiu mesmo recebendo a lista de exclusão, dá mais
           // uma chance ao Gemini apontando explicitamente a colisão.
-          if (usedNames.has(ai.nome.trim().toLowerCase())) {
+          if (collides(ai.nome)) {
             ai = await analyzeImageForCatalog({
               imageDataUrl: dataUrl,
               categoria: category.displayName,
@@ -452,14 +624,18 @@ export const catalogRouter = router({
           }
 
           // Rede de segurança: garante unicidade mesmo se a IA colidir de
-          // novo, pra não travar o pipeline numa pasta grande.
+          // novo, pra não travar o pipeline numa pasta grande. Checa nome E
+          // slug — um nome novo pode gerar a mesma URL de um produto já
+          // existente com nome diferente (ex: produto renomeado na Tray sem
+          // atualizar a URL).
           let nome = ai.nome;
-          if (usedNames.has(nome.trim().toLowerCase())) {
+          if (collides(nome)) {
             let n = 2;
-            while (usedNames.has(`${nome} ${n}`.trim().toLowerCase())) n += 1;
+            while (collides(`${nome} ${n}`)) n += 1;
             nome = `${nome} ${n}`;
           }
           usedNames.add(nome.trim().toLowerCase());
+          usedSlugs.add(buildSlug(nome).toLowerCase());
 
           const sku = buildSku({
             cat3: category.code3,
@@ -611,6 +787,43 @@ export const catalogRouter = router({
         naoEncontrados: notFoundSkus.length,
         naoEncontradosSkus: notFoundSkus.slice(0, 30),
       };
+    }),
+
+  /**
+   * Sincroniza o snapshot de nomes/URLs realmente cadastrados na Tray
+   * (mesma planilha de produtos usada em `markExportedFromTray`) pra dentro
+   * de `traySyncedNames`, usado por `generateSuggestions` na checagem de
+   * duplicidade. Cobre produtos que já existem na loja mas nunca passaram
+   * por este app (cadastro manual, ou anterior à automação) — sem isso a
+   * IA pode sugerir nome/URL que só colide na hora de importar na Tray.
+   * Substitui o snapshot inteiro a cada sync (a planilha é sempre o estado
+   * completo e atual da loja).
+   */
+  syncTrayCatalogNames: protectedProcedure
+    .input(z.object({ fileBase64: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const db = await requireDb();
+      const b64 = input.fileBase64.includes(",")
+        ? input.fileBase64.slice(input.fileBase64.indexOf(",") + 1)
+        : input.fileBase64;
+      const buffer = Buffer.from(b64, "base64");
+
+      const entries = await parseTrayCatalogNames(buffer);
+      if (entries.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Não achei a coluna 'Nome produto' preenchida. Confirme que é a planilha de produtos exportada pela Tray.",
+        });
+      }
+
+      await db.delete(traySyncedNames);
+      const CHUNK = 200;
+      for (let i = 0; i < entries.length; i += CHUNK) {
+        await db.insert(traySyncedNames).values(entries.slice(i, i + CHUNK));
+      }
+
+      return { total: entries.length };
     }),
 
   /**
@@ -849,6 +1062,9 @@ export const catalogRouter = router({
           key: `catAdic${i + 1}`,
           width: 16,
         })),
+        // Adicionada no fim por pedido da Priscila em 2026-07-15 (mesma
+        // regra de nunca inserir coluna no meio — ver nota acima).
+        { header: "NCM do produto", key: "ncm", width: 14 },
       ];
       ws.getRow(1).font = { bold: true };
 
@@ -922,6 +1138,7 @@ export const catalogRouter = router({
           mensagemAdicional: "",
           quandoAcabarEstoque: TRAY_EXPORT_DEFAULTS.quandoAcabarEstoque,
           ...catAdic,
+          ncm: TRAY_EXPORT_DEFAULTS.ncm,
         });
       }
 

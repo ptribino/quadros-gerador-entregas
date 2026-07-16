@@ -329,6 +329,27 @@ export default function CatalogPage() {
     reader.readAsDataURL(file);
   };
 
+  const syncNamesInputRef = useRef<HTMLInputElement>(null);
+  const syncNamesMutation = trpc.catalog.syncTrayCatalogNames.useMutation({
+    onSuccess: (res) => {
+      toast.success(
+        `${res.total} produto(s) da loja sincronizados — a geração de sugestões agora evita repetir esses nomes/URLs.`,
+      );
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleSyncNamesFilePick = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      syncNamesMutation.mutate({ fileBase64: dataUrl });
+    };
+    reader.onerror = () => toast.error("Erro ao ler o arquivo");
+    reader.readAsDataURL(file);
+  };
+
   const exportTrayMutation = trpc.catalog.exportTrayImport.useMutation({
     onSuccess: (res) => {
       const skipped = res.skipped ?? [];
@@ -1000,6 +1021,26 @@ export default function CatalogPage() {
                 title="Suba a planilha de produtos exportada pela Tray (CSV ou XLSX) — todo SKU com 'Código produto' preenchido é marcado como Cadastrado na Tray, sem precisar selecionar um por um."
               >
                 {markExportedMutation.isPending ? "..." : "Marcar cadastrados (planilha Tray)"}
+              </Button>
+
+              <input
+                ref={syncNamesInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(e) => {
+                  handleSyncNamesFilePick(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                variant="outline"
+                className={GHOST_BTN_CLASS}
+                disabled={syncNamesMutation.isPending}
+                onClick={() => syncNamesInputRef.current?.click()}
+                title="Suba a planilha de produtos exportada pela Tray (CSV ou XLSX) pra atualizar a lista de nomes/URLs já usados na loja — evita que a próxima geração de sugestões repita um nome (ou gere a mesma URL) de um produto que já existe na Tray mas nunca passou por este app."
+              >
+                {syncNamesMutation.isPending ? "..." : "Sincronizar nomes da loja (evitar duplicados)"}
               </Button>
             </div>
 

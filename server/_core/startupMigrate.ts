@@ -308,6 +308,20 @@ async function ensureSchema(pool: mysql.Pool) {
     }
   }
 
+  // Tabela tray_synced_names — snapshot de nomes/URLs da loja Tray real,
+  // usado só pra checagem de duplicidade em generateSuggestions (ver
+  // catalogRouter.ts syncTrayCatalogNames).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tray_synced_names (
+      id int AUTO_INCREMENT NOT NULL,
+      nome varchar(255) NOT NULL,
+      slugSeo varchar(255),
+      referencia varchar(128),
+      syncedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    )
+  `);
+
   // Backfill: corrige URLs de imageUrl4 que tenham `id=d/...` (bug de
   // sanitização do ID quando o env var foi setado com prefixo `d/`).
   try {

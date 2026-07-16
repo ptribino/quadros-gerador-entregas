@@ -251,3 +251,23 @@ export const productGenTasks = mysqlTable("product_gen_tasks", {
 
 export type ProductGenTask = typeof productGenTasks.$inferSelect;
 export type InsertProductGenTask = typeof productGenTasks.$inferInsert;
+
+/**
+ * Snapshot dos nomes/URLs realmente cadastrados na loja Tray, sincronizado
+ * via upload da planilha de produtos que a Tray exporta (mesmo arquivo
+ * usado por `markExportedFromTray`). Cobre produtos que nunca passaram por
+ * este app (cadastro manual, ou anterior à automação) — usado só pra
+ * checagem de duplicidade em `generateSuggestions`, não é dado operacional.
+ * Cada sync apaga e reinsere tudo (a planilha é sempre o estado completo
+ * atual da loja).
+ */
+export const traySyncedNames = mysqlTable("tray_synced_names", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 255 }).notNull(),
+  slugSeo: varchar("slugSeo", { length: 255 }),
+  referencia: varchar("referencia", { length: 128 }),
+  syncedAt: timestamp("syncedAt").defaultNow().notNull(),
+});
+
+export type TraySyncedName = typeof traySyncedNames.$inferSelect;
+export type InsertTraySyncedName = typeof traySyncedNames.$inferInsert;
