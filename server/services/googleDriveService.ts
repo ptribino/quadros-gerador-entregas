@@ -24,7 +24,7 @@ export function extractDriveFileId(input: string): string {
   return trimmed;
 }
 
-interface GoogleDriveFile {
+export interface GoogleDriveFile {
   id: string;
   name: string;
   mimeType: string;
@@ -357,6 +357,26 @@ class GoogleDriveService {
       const errText = await res.text();
       throw new Error(`Drive makePublic failed (${res.status}): ${errText}`);
     }
+  }
+
+  /**
+   * Busca metadados (id/name/mimeType/webViewLink) de um arquivo específico
+   * pelo ID. Usado quando a Pri escolhe uma imagem exata via busca por nome
+   * (em vez de processar as N primeiras imagens da pasta).
+   */
+  async getFileMetadata(accessToken: string, fileId: string): Promise<GoogleDriveFile> {
+    const params = new URLSearchParams({
+      fields: 'id,name,mimeType,webViewLink',
+      supportsAllDrives: 'true',
+    });
+    const response = await fetch(`${this.baseUrl}/files/${fileId}?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Drive get file metadata failed (${response.status}): ${errorText}`);
+    }
+    return response.json() as Promise<GoogleDriveFile>;
   }
 
   /** Baixa um arquivo do Drive como Buffer (para reupload em outra pasta). */

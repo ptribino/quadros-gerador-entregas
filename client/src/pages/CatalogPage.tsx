@@ -172,6 +172,7 @@ export default function CatalogPage() {
   const [previewOpen, setPreviewOpen] = useState<boolean>(false);
   const [previewSearchInput, setPreviewSearchInput] = useState<string>("");
   const [previewSearchTerm, setPreviewSearchTerm] = useState<string>("");
+  const [previewSelectedIds, setPreviewSelectedIds] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("generated");
   const [genFilter, setGenFilter] = useState<GenFilter>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -766,6 +767,7 @@ export default function CatalogPage() {
             if (!open) {
               setPreviewSearchInput("");
               setPreviewSearchTerm("");
+              setPreviewSelectedIds(new Set());
             }
           }}
         >
@@ -805,22 +807,86 @@ export default function CatalogPage() {
                   <p className="mb-2 text-xs text-muted-foreground">
                     Mostrando {folderPreviewQuery.data.length} imagem(ns)
                     {folderPreviewQuery.data.length >= 60 && " (limite da pré-visualização — pode haver mais)"}.
+                    {" "}Clique numa imagem para selecioná-la e gerar sugestão só dela.
                   </p>
                   <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
-                    {folderPreviewQuery.data.map((f) => (
-                      <div key={f.id} className="space-y-1">
-                        <div className="aspect-square overflow-hidden rounded-md border bg-muted">
-                          <DriveThumb fileId={f.id} name={f.name} />
-                        </div>
-                        <p className="truncate text-[10px] text-muted-foreground" title={f.name}>
-                          {f.name}
-                        </p>
-                      </div>
-                    ))}
+                    {folderPreviewQuery.data.map((f) => {
+                      const isSelected = previewSelectedIds.has(f.id);
+                      return (
+                        <button
+                          type="button"
+                          key={f.id}
+                          onClick={() =>
+                            setPreviewSelectedIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(f.id)) next.delete(f.id);
+                              else next.add(f.id);
+                              return next;
+                            })
+                          }
+                          className="space-y-1 text-left"
+                        >
+                          <div
+                            className={`relative aspect-square overflow-hidden rounded-md border-2 bg-muted transition-colors ${
+                              isSelected ? "border-[#4338CA]" : "border-transparent hover:border-[#4338CA]/40"
+                            }`}
+                          >
+                            <DriveThumb fileId={f.id} name={f.name} />
+                            {isSelected && (
+                              <div className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#4338CA] text-[11px] font-bold text-white">
+                                ✓
+                              </div>
+                            )}
+                          </div>
+                          <p className="truncate text-[10px] text-muted-foreground" title={f.name}>
+                            {f.name}
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </>
               )}
             </div>
+
+            {previewSelectedIds.size > 0 && (
+              <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+                <span className="text-xs text-muted-foreground">
+                  {previewSelectedIds.size} imagem(ns) selecionada(s)
+                  {!categoryId && " — escolha uma categoria acima primeiro"}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPreviewSelectedIds(new Set())}
+                  >
+                    Limpar seleção
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-[#4338CA] text-white hover:bg-[#3730A3]"
+                    disabled={!categoryId || suggestMutation.isPending}
+                    onClick={() =>
+                      suggestMutation.mutate(
+                        {
+                          folderId,
+                          categoryCodeId: Number(categoryId),
+                          fileIds: Array.from(previewSelectedIds),
+                        },
+                        { onSuccess: () => setPreviewSelectedIds(new Set()) },
+                      )
+                    }
+                  >
+                    {suggestMutation.isPending
+                      ? "Analisando..."
+                      : `Gerar sugestão (${previewSelectedIds.size})`}
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

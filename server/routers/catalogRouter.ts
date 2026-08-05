@@ -518,6 +518,10 @@ export const catalogRouter = router({
         // (até ALL_ITEMS_CAP) — pedido explícito do usuário pra casos em
         // que ele quer o banco inteiro, não só uma amostra.
         all: z.boolean().optional().default(false),
+        // Quando informado, ignora `count`/`all` e processa só esses
+        // arquivos exatos — caso de uso: a Pri buscou uma imagem pelo nome
+        // na pré-visualização e quer gerar sugestão só dela.
+        fileIds: z.array(z.string().min(1)).min(1).max(50).optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -537,13 +541,20 @@ export const catalogRouter = router({
       // pasta com milhares de arquivos (cada imagem = 1 chamada Gemini).
       const ALL_ITEMS_CAP = 300;
 
-      // Recursivo: a pasta-mãe da categoria pode não ter imagens diretas,
-      // só sub-subpastas (ex: "#PN Paisagens Naturais" → #PN01 Cachoeiras → imagens).
-      const files = await googleDriveService.listImagesRecursive(accessToken, input.folderId, {
-        maxDepth: 3,
-        maxFiles: input.all ? ALL_ITEMS_CAP : Math.max(input.count * 5, 50),
-      });
-      const slice = input.all ? files : files.slice(0, input.count);
+      // Se a Pri escolheu arquivo(s) específico(s) via busca por nome, pula a
+      // listagem/slice da pasta e resolve só os metadados desses IDs.
+      const slice = input.fileIds && input.fileIds.length > 0
+        ? await Promise.all(
+            input.fileIds.map((id) => googleDriveService.getFileMetadata(accessToken, id)),
+          )
+        : // Recursivo: a pasta-mãe da categoria pode não ter imagens diretas,
+          // só sub-subpastas (ex: "#PN Paisagens Naturais" → #PN01 Cachoeiras → imagens).
+          await googleDriveService
+            .listImagesRecursive(accessToken, input.folderId, {
+              maxDepth: 3,
+              maxFiles: input.all ? ALL_ITEMS_CAP : Math.max(input.count * 5, 50),
+            })
+            .then((files) => (input.all ? files : files.slice(0, input.count)));
       if (slice.length === 0) {
         return { processed: 0, succeeded: 0, failed: 0, skipped: 0, errors: [], skippedFiles: [] };
       }
