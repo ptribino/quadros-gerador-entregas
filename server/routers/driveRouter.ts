@@ -81,11 +81,13 @@ export const driveRouter = router({
     }),
 
   listImages: protectedProcedure
-    .input(z.object({ folderId: z.string().optional() }).optional())
+    .input(z.object({ folderId: z.string().optional(), search: z.string().optional() }).optional())
     .query(async ({ input, ctx }) => {
     try {
       const accessToken = await getUserAccessToken(ctx.user!.openId);
-      const files = await googleDriveService.listFiles(accessToken, input?.folderId);
+      const files = await googleDriveService.listFiles(accessToken, input?.folderId, {
+        nameContains: input?.search,
+      });
 
       return {
         success: true,

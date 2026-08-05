@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Search } from "lucide-react";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import { FONT_SANS, FONT_MONO, FIELD_LABEL_CLASS, FIELD_INPUT_CLASS, GHOST_BTN_CLASS } from "@/lib/designTokens";
@@ -169,6 +170,8 @@ export default function CatalogPage() {
   const [count, setCount] = useState<number>(15);
   const [allItems, setAllItems] = useState<boolean>(false);
   const [previewOpen, setPreviewOpen] = useState<boolean>(false);
+  const [previewSearchInput, setPreviewSearchInput] = useState<string>("");
+  const [previewSearchTerm, setPreviewSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("generated");
   const [genFilter, setGenFilter] = useState<GenFilter>("all");
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -193,8 +196,14 @@ export default function CatalogPage() {
     { parentFolderId: baseFolderId },
     { enabled: Boolean(user) && Boolean(baseFolderId) },
   );
+  // Debounce: só dispara a busca por nome no Drive 400ms depois que a Pri parar de digitar
+  useEffect(() => {
+    const timer = setTimeout(() => setPreviewSearchTerm(previewSearchInput.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [previewSearchInput]);
+
   const folderPreviewQuery = trpc.catalog.listFolderImages.useQuery(
-    { folderId },
+    { folderId, search: previewSearchTerm || undefined },
     { enabled: Boolean(user) && previewOpen && Boolean(folderId) },
   );
   // Sem filtro de status no servidor: busca todos os status da categoria
@@ -750,14 +759,34 @@ export default function CatalogPage() {
           </div>
         </div>
 
-        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <Dialog
+          open={previewOpen}
+          onOpenChange={(open) => {
+            setPreviewOpen(open);
+            if (!open) {
+              setPreviewSearchInput("");
+              setPreviewSearchTerm("");
+            }
+          }}
+        >
           <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Imagens da pasta</DialogTitle>
             </DialogHeader>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={previewSearchInput}
+                onChange={(e) => setPreviewSearchInput(e.target.value)}
+                placeholder="Buscar imagem pelo nome do arquivo (inclui subpastas)..."
+                className="pl-8 text-xs"
+              />
+            </div>
             <div className="flex-1 overflow-y-auto">
               {folderPreviewQuery.isLoading && (
-                <p className="py-8 text-center text-sm text-muted-foreground">Carregando imagens...</p>
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  {previewSearchTerm ? "Buscando..." : "Carregando imagens..."}
+                </p>
               )}
               {folderPreviewQuery.isError && (
                 <p className="py-8 text-center text-sm text-destructive">
@@ -766,7 +795,9 @@ export default function CatalogPage() {
               )}
               {folderPreviewQuery.data && folderPreviewQuery.data.length === 0 && (
                 <p className="py-8 text-center text-sm text-muted-foreground">
-                  Nenhuma imagem encontrada nesta pasta (nem nas subpastas).
+                  {previewSearchTerm
+                    ? `Nenhuma imagem com "${previewSearchTerm}" no nome nesta pasta (nem nas subpastas).`
+                    : "Nenhuma imagem encontrada nesta pasta (nem nas subpastas)."}
                 </p>
               )}
               {folderPreviewQuery.data && folderPreviewQuery.data.length > 0 && (

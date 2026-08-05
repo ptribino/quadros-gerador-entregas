@@ -486,13 +486,18 @@ export const catalogRouter = router({
       z.object({
         folderId: z.string().min(1),
         maxFiles: z.number().int().min(1).max(300).default(60),
+        // Busca por nome (recursiva, mesma árvore de subpastas) — quando
+        // informado, ignora o limite padrão de 60 pra não esconder um
+        // arquivo que exista mas caia fora da primeira leva.
+        search: z.string().trim().min(1).optional(),
       }),
     )
     .query(async ({ input, ctx }) => {
       const accessToken = await requireAccessToken(ctx.user.openId);
       const files = await googleDriveService.listImagesRecursive(accessToken, input.folderId, {
         maxDepth: 3,
-        maxFiles: input.maxFiles,
+        maxFiles: input.search ? 300 : input.maxFiles,
+        nameContains: input.search,
       });
       return files.map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType }));
     }),

@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Upload, X, Loader2, HardDrive, Image as ImageIcon, FolderOpen, ChevronLeft, Link as LinkIcon } from 'lucide-react';
+import { Upload, X, Loader2, HardDrive, Image as ImageIcon, FolderOpen, ChevronLeft, Link as LinkIcon, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 
@@ -22,7 +22,15 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
   const [folderLinkInput, setFolderLinkInput] = useState('');
   const [folderLinkError, setFolderLinkError] = useState('');
+  const [imageSearchInput, setImageSearchInput] = useState('');
+  const [imageSearchTerm, setImageSearchTerm] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Debounce: só dispara a busca no Drive 400ms depois que o usuário parar de digitar
+  useEffect(() => {
+    const timer = setTimeout(() => setImageSearchTerm(imageSearchInput.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [imageSearchInput]);
 
   const extractFolderIdFromLink = (link: string): string | null => {
     // Não-guloso + lookahead: para a captura no primeiro "/", "?" ou início
@@ -41,6 +49,8 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
       // Abre o dialog já no passo de imagens da pasta informada
       setSelectedFolder({ id: folderId, name: 'Pasta do link' });
       setDriveStep('images');
+      setImageSearchInput('');
+      setImageSearchTerm('');
       setIsDriveOpen(true);
     } else {
       setFolderLinkError('Link inválido. Cole o link completo de uma pasta do Google Drive.');
@@ -52,7 +62,7 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
   });
 
   const imagesQuery = trpc.drive.listImages.useQuery(
-    { folderId: selectedFolder.id ?? undefined },
+    { folderId: selectedFolder.id ?? undefined, search: imageSearchTerm || undefined },
     { enabled: isDriveOpen && driveStep === 'images' }
   );
 
@@ -97,6 +107,8 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
   const handleSelectFolder = (folderId: string | null, folderName: string) => {
     setSelectedFolder({ id: folderId, name: folderName });
     setDriveStep('images');
+    setImageSearchInput('');
+    setImageSearchTerm('');
   };
 
   const handleDriveFileSelect = async (fileId: string, fileName: string, mimeType: string) => {
@@ -127,6 +139,8 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
       setSelectedFolder({ id: null, name: 'Meu Drive' });
       setFolderLinkInput('');
       setFolderLinkError('');
+      setImageSearchInput('');
+      setImageSearchTerm('');
     }
   };
 
@@ -290,17 +304,31 @@ export default function ImageSelector({ onImageSelect, selectedImage }: ImageSel
           {/* Passo 2: Seleção de Imagem */}
           {driveStep === 'images' && (
             <div className="flex-1 overflow-y-auto space-y-2 mt-2">
+              <div className="relative sticky top-0 z-10 bg-background pb-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={imageSearchInput}
+                  onChange={(e) => setImageSearchInput(e.target.value)}
+                  placeholder="Buscar imagem pelo nome do arquivo..."
+                  className="pl-8 text-xs"
+                />
+              </div>
+
               {isImagesLoading && (
                 <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Carregando imagens...
+                  {imageSearchTerm ? 'Buscando...' : 'Carregando imagens...'}
                 </div>
               )}
 
               {!isImagesLoading && displayImages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground">
                   <ImageIcon className="w-8 h-8" />
-                  <p className="text-sm">Nenhuma imagem encontrada nesta pasta.</p>
+                  <p className="text-sm">
+                    {imageSearchTerm
+                      ? `Nenhuma imagem com "${imageSearchTerm}" no nome nesta pasta.`
+                      : 'Nenhuma imagem encontrada nesta pasta.'}
+                  </p>
                 </div>
               )}
 

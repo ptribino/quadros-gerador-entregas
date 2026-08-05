@@ -193,7 +193,11 @@ class GoogleDriveService {
    * Inclui suporte a Shared Drives (necessário quando a pasta de origem
    * vive num drive compartilhado externo, comum no fluxo de banco de imagens).
    */
-  async listFiles(accessToken: string, folderId?: string): Promise<GoogleDriveFile[]> {
+  async listFiles(
+    accessToken: string,
+    folderId?: string,
+    options: { nameContains?: string } = {},
+  ): Promise<GoogleDriveFile[]> {
     const params = new URLSearchParams({
       fields: 'files(id,name,mimeType,webViewLink)',
       pageSize: '100',
@@ -203,10 +207,11 @@ class GoogleDriveService {
       corpora: 'allDrives',
     });
 
-    const query = folderId
-      ? `'${folderId}' in parents and trashed=false and mimeType contains 'image/'`
-      : `trashed=false and mimeType contains 'image/'`;
-    params.set('q', query);
+    const clauses = [`trashed=false`, `mimeType contains 'image/'`];
+    if (folderId) clauses.push(`'${folderId}' in parents`);
+    const term = options.nameContains?.trim();
+    if (term) clauses.push(`name contains '${term.replace(/'/g, "\\'")}'`);
+    params.set('q', clauses.join(' and '));
 
     const response = await fetch(`${this.baseUrl}/files?${params}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
@@ -401,7 +406,7 @@ class GoogleDriveService {
   async listImagesRecursive(
     accessToken: string,
     folderId: string,
-    options: { maxDepth?: number; maxFiles?: number } = {},
+    options: { maxDepth?: number; maxFiles?: number; nameContains?: string } = {},
   ): Promise<GoogleDriveFile[]> {
     const maxDepth = options.maxDepth ?? 3;
     const maxFiles = options.maxFiles ?? 500;
@@ -412,7 +417,7 @@ class GoogleDriveService {
     while (queue.length > 0 && out.length < maxFiles) {
       const { id, depth } = queue.shift()!;
 
-      const files = await this.listFiles(accessToken, id);
+      const files = await this.listFiles(accessToken, id, { nameContains: options.nameContains });
       for (const f of files) {
         if (out.length >= maxFiles) break;
         out.push(f);
