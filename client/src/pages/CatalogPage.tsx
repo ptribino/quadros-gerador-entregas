@@ -850,12 +850,11 @@ export default function CatalogPage() {
             </div>
 
             {previewSelectedIds.size > 0 && (
-              <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
-                <span className="text-xs text-muted-foreground">
-                  {previewSelectedIds.size} imagem(ns) selecionada(s)
-                  {!categoryId && " — escolha uma categoria acima primeiro"}
-                </span>
-                <div className="flex gap-2">
+              <div className="flex flex-col gap-2 border-t border-border pt-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-muted-foreground">
+                    {previewSelectedIds.size} imagem(ns) selecionada(s)
+                  </span>
                   <Button
                     type="button"
                     variant="outline"
@@ -864,10 +863,27 @@ export default function CatalogPage() {
                   >
                     Limpar seleção
                   </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={categoryId} onValueChange={handleSelectCategory}>
+                    <SelectTrigger className={`${FIELD_INPUT_CLASS} h-9 flex-1`}>
+                      <SelectValue placeholder="Escolha a categoria (SKU/Tray)..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categoriesQuery.data?.map((cat) => {
+                        const folder = folderByName.get(cat.id);
+                        return (
+                          <SelectItem key={cat.id} value={String(cat.id)}>
+                            {cat.code3} — {cat.displayName} {folder ? "✓" : "(sem pasta)"}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
                   <Button
                     type="button"
                     size="sm"
-                    className="bg-[#4338CA] text-white hover:bg-[#3730A3]"
+                    className="bg-[#4338CA] text-white hover:bg-[#3730A3] flex-none"
                     disabled={!categoryId || suggestMutation.isPending}
                     onClick={() =>
                       suggestMutation.mutate(
