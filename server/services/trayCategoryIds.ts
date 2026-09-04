@@ -96,24 +96,54 @@ export function detectNivel3(
 }
 
 /**
+ * Monta o mapa de IDs "aprendidos" via cadastro de categoria na UI
+ * (`category_codes.trayCategoriaId`, preenchido pela usuária ao criar uma
+ * categoria nova em "Curadoria de catálogo") — chaveado do mesmo jeito que
+ * TRAY_CATEGORY_ID ("Nível1" ou "Nível1>Nível2"), pra sobrepor/estender o
+ * dicionário fixo sem precisar editar este arquivo toda vez que ela cria
+ * uma categoria de Ambientes ou Estilos nova na Tray.
+ */
+export function buildCategoryIdOverrides(
+  categories: ReadonlyArray<{
+    trayCategoriaPrincipal: string;
+    traySubcategoria: string | null;
+    trayCategoriaId: number | null;
+  }>,
+): Record<string, number> {
+  const overrides: Record<string, number> = {};
+  for (const c of categories) {
+    if (!c.trayCategoriaId) continue;
+    const key = c.traySubcategoria
+      ? `${c.trayCategoriaPrincipal}>${c.traySubcategoria}`
+      : c.trayCategoriaPrincipal;
+    overrides[key] = c.trayCategoriaId;
+  }
+  return overrides;
+}
+
+/**
  * Monta a lista de IDs de categoria ADICIONAL (Ambientes derivados dos
  * cômodos elegíveis da categoria + Estilo, se a categoria tiver um definido)
  * pro export de produtos. Dedupe e ignora chaves sem ID mapeado.
+ * `idOverrides` (ver buildCategoryIdOverrides) tem prioridade sobre o
+ * dicionário fixo TRAY_CATEGORY_ID quando a mesma chave existir nos dois.
  */
 export function buildAdditionalCategoryIds(args: {
   eligibleRooms: readonly RoomType[];
   trayEstiloAdicional?: string | null;
+  idOverrides?: Record<string, number>;
 }): number[] {
   const ids = new Set<number>();
+  const lookup = (key: string) => args.idOverrides?.[key] ?? TRAY_CATEGORY_ID[key];
 
   for (const room of args.eligibleRooms) {
     const key = ROOM_TO_TRAY_AMBIENTE[room];
-    const id = key ? TRAY_CATEGORY_ID[key] : undefined;
+    const id = key ? lookup(key) : undefined;
     if (id) ids.add(id);
   }
 
   if (args.trayEstiloAdicional) {
-    const id = TRAY_CATEGORY_ID[`Estilos>${args.trayEstiloAdicional}`];
+    const id = lookup(`Estilos>${args.trayEstiloAdicional}`);
     if (id) ids.add(id);
   }
 

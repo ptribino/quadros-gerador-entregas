@@ -1,14 +1,14 @@
 import crypto from "crypto";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getValidAccessToken } from "../_core/oauth";
 import { googleDriveService, extractDriveFileId } from "../services/googleDriveService";
 import { analyzeImageForCatalog, buildSku, buildSlug } from "../services/catalogService";
 import { roomsForCategory } from "../services/catalogPipeline";
-import { buildAdditionalCategoryIds, detectNivel3 } from "../services/trayCategoryIds";
+import { buildAdditionalCategoryIds, buildCategoryIdOverrides, detectNivel3 } from "../services/trayCategoryIds";
 import { getDb } from "../db";
 import { categoryCodes, products, productStatusEnum, traySyncedNames } from "../../drizzle/schema";
 import { ENV } from "../_core/env";
@@ -405,26 +405,32 @@ function toTrayImageUrl(saved: string | null | undefined): string {
 const QUANDO_ACABAR_ESTOQUE = "Manter ativo, mas não permitir vendas";
 
 /**
- * Preço de custo padrão e markup aplicados a TODO produto exportado — o
- * preço de venda é sempre custo × markup, nunca um valor solto (confirmado
- * com a Priscila em 2026-07-05: venda = custo × 3,5).
+ * Markup aplicado a TODO produto exportado — o preço de venda é sempre
+ * custo × markup, nunca um valor solto (confirmado com a Priscila em
+ * 2026-07-05: venda = custo × 3,5). A partir da tabela de preços nova
+ * (2026-09-04), o "Novo preço" de cada tamanho já É o preço de venda; o
+ * custo correspondente é derivado dividindo por esse markup, preservando
+ * a regra custo×3,5 em vez de gravar um preço de venda solto.
  */
-const PRECO_CUSTO_PADRAO = 73.0;
 const MARKUP_VENDA = 3.5;
+const PRECO_VENDA_PADRAO = 339.0; // tamanho 60cm x 40cm — ver TAMANHOS em exportTrayVariations
+const PRECO_CUSTO_PADRAO = Math.round((PRECO_VENDA_PADRAO / MARKUP_VENDA) * 100) / 100;
 
 /**
  * Defaults operacionais fixos pro export de importação Tray (`exportTrayImport`)
  * — confirmados com a Priscila em 2026-07-04. Aplicados a TODO produto
  * exportado, independente do que estiver salvo em precoVenda/precoCusto/
  * pesoGramas/dimensões no DB (esses campos no DB continuam existindo pra
- * outros usos, mas a loja padronizou esses valores pra loja toda).
+ * outros usos, mas a loja padronizou esses valores pra loja toda). Peso e
+ * preço são os do tamanho 60cm x 40cm (tabela de preços atualizada em
+ * 2026-09-04).
  */
 const TRAY_EXPORT_DEFAULTS = {
-  precoVenda: PRECO_CUSTO_PADRAO * MARKUP_VENDA,
+  precoVenda: PRECO_VENDA_PADRAO,
   precoCusto: PRECO_CUSTO_PADRAO,
-  pesoGramas: 2470,
-  comprimentoCm: 65,
-  larguraCm: 45,
+  pesoGramas: 2970,
+  comprimentoCm: 69,
+  larguraCm: 49,
   alturaCm: 9,
   quandoAcabarEstoque: QUANDO_ACABAR_ESTOQUE,
   // NCM fixo pra toda a loja — confirmado com a Priscila em 2026-07-15.
@@ -1000,6 +1006,14 @@ export const catalogRouter = router({
       const skipped = allRows
         .filter((r) => !r.p.imageUrl1)
         .map((r) => ({ id: r.p.id, sku: r.p.sku, nome: r.p.nome }));
+
+      // IDs de categoria cadastrados manualmente pela usuária (ver
+      // catalog.createCategory) têm prioridade sobre TRAY_CATEGORY_ID —
+      // buscado uma vez pra todas as categorias, não só as dos produtos
+      // exportados (uma categoria "Estilos" referenciada por várias outras
+      // via trayEstiloAdicional pode não ter produto próprio nesta leva).
+      const allCategoryRows = await db.select().from(categoryCodes);
+      const categoryIdOverrides = buildCategoryIdOverrides(allCategoryRows);
       // Produtos gerados antes da Etapa 4 (mockup por cor de moldura) não
       // têm mockupUrlLightWood/DarkWood/White/Black — a variação por cor
       // fica em branco na planilha do produto principal e a usuária
@@ -1100,6 +1114,7 @@ export const catalogRouter = router({
         const additionalCategoryIds = buildAdditionalCategoryIds({
           eligibleRooms: roomsForCategory(c?.code3),
           trayEstiloAdicional: c?.trayEstiloAdicional,
+          idOverrides: categoryIdOverrides,
         });
         const catAdic: Record<string, number | null> = {};
         for (let i = 0; i < 10; i++) {
@@ -1208,20 +1223,27 @@ export const catalogRouter = router({
         largura: number;
         comprimento: number;
         pesoGramas: number;
+        precoVenda: number;
         precoCusto: number;
       };
-      // Pesos "embalado c/ moldura" e preço de custo por medida (tabela
-      // confirmada com a Priscila em 2026-07-05) — preço de venda de cada
-      // variação é sempre custo × MARKUP_VENDA, igual ao produto principal.
+      // Pesos e preço de venda por medida (tabela de preços confirmada com
+      // a Priscila em 2026-09-04 — "Novo preço" já é o preço de venda ao
+      // cliente). precoCusto é derivado dividindo pelo MARKUP_VENDA, pra
+      // manter a regra "venda = custo × markup" em vez de gravar um preço
+      // de venda solto. largura/comprimento da caixa = medida da arte + 9cm
+      // de margem em cada dimensão (antes era +5cm — ajustado em 2026-09-04
+      // porque a caixa embalada estava saindo maior que a margem antiga).
+      const precoCustoDe = (precoVenda: number) =>
+        Math.round((precoVenda / MARKUP_VENDA) * 100) / 100;
       const TAMANHOS: SizeRow[] = [
-        { nome: "60cm x 40cm",   altura: 9, largura: 45,  comprimento: 65,  pesoGramas: 2470, precoCusto: 73.0 },
-        { nome: "70cm x 50cm",   altura: 9, largura: 55,  comprimento: 75,  pesoGramas: 2950, precoCusto: 100.0 },
-        { nome: "80cm x 55cm",   altura: 9, largura: 60,  comprimento: 85,  pesoGramas: 3330, precoCusto: 127.0 },
-        { nome: "90cm x 60cm",   altura: 9, largura: 65,  comprimento: 95,  pesoGramas: 4020, precoCusto: 165.0 },
-        { nome: "100cm x 70cm",  altura: 9, largura: 75,  comprimento: 105, pesoGramas: 4450, precoCusto: 196.0 },
-        { nome: "120cm x 80cm",  altura: 9, largura: 85,  comprimento: 125, pesoGramas: 5560, precoCusto: 242.0 },
-        { nome: "150cm x 100cm", altura: 9, largura: 105, comprimento: 155, pesoGramas: 7880, precoCusto: 300.0 },
-        { nome: "160cm x 110cm", altura: 9, largura: 115, comprimento: 165, pesoGramas: 9000, precoCusto: 318.0 },
+        { nome: "60cm x 40cm",   altura: 9, largura: 49,  comprimento: 69,  pesoGramas: 2970,  precoVenda: 339.0,  precoCusto: precoCustoDe(339.0) },
+        { nome: "70cm x 50cm",   altura: 9, largura: 59,  comprimento: 79,  pesoGramas: 3400,  precoVenda: 419.0,  precoCusto: precoCustoDe(419.0) },
+        { nome: "80cm x 55cm",   altura: 9, largura: 64,  comprimento: 89,  pesoGramas: 5550,  precoVenda: 514.0,  precoCusto: precoCustoDe(514.0) },
+        { nome: "90cm x 60cm",   altura: 9, largura: 69,  comprimento: 99,  pesoGramas: 6200,  precoVenda: 598.0,  precoCusto: precoCustoDe(598.0) },
+        { nome: "100cm x 70cm",  altura: 9, largura: 79,  comprimento: 109, pesoGramas: 7000,  precoVenda: 787.0,  precoCusto: precoCustoDe(787.0) },
+        { nome: "120cm x 80cm",  altura: 9, largura: 89,  comprimento: 129, pesoGramas: 10500, precoVenda: 1115.0, precoCusto: precoCustoDe(1115.0) },
+        { nome: "150cm x 100cm", altura: 9, largura: 109, comprimento: 159, pesoGramas: 16300, precoVenda: 1358.0, precoCusto: precoCustoDe(1358.0) },
+        { nome: "160cm x 110cm", altura: 9, largura: 119, comprimento: 169, pesoGramas: 19000, precoVenda: 1487.0, precoCusto: precoCustoDe(1487.0) },
       ];
       // "Ambos" (padrão): os 8 tamanhos em Retrato E Paisagem (16 variações)
       // — ajustado em 2026-07-10: a restrição antiga de só os 2 tamanhos
@@ -1332,7 +1354,7 @@ export const catalogRouter = router({
             comprimento: tam.comprimento,
             largura: tam.largura,
             peso: tam.pesoGramas,
-            precoVenda: tam.precoCusto * MARKUP_VENDA,
+            precoVenda: tam.precoVenda,
             precoCusto: tam.precoCusto,
           });
         }
@@ -1477,4 +1499,69 @@ export const catalogRouter = router({
     const db = await requireDb();
     return db.select().from(categoryCodes).orderBy(categoryCodes.displayName);
   }),
+
+  /**
+   * Cadastra uma nova categoria no padrão Tray direto pela curadoria de
+   * catálogo — antes só dava pra criar categoria editando os seeds em
+   * scripts/seedCategoryCodes.ts e server/_core/startupMigrate.ts na mão.
+   *
+   * `trayCategoriaPrincipal`/`traySubcategoria` viram as colunas "Nome da
+   * categoria - nível 1/2" no export (`exportTrayImport`) — a Tray casa
+   * essas colunas por NOME, não por ID, então a categoria já funciona pro
+   * import principal assim que cadastrada aqui, sem precisar de ID nenhum.
+   *
+   * `trayCategoriaId` é opcional e serve pra OUTRA coisa: é o ID numérico
+   * real do nó desta categoria na árvore da Tray (copiado do admin), usado
+   * só quando ALGUMA OUTRA categoria referenciar esta aqui pelo campo
+   * `trayEstiloAdicional` (categoria adicional/cross-listing no export —
+   * ver buildCategoryIdOverrides em server/services/trayCategoryIds.ts).
+   * Sem ele, a categoria adicional correspondente simplesmente não é
+   * gerada; o import principal do produto não é afetado.
+   */
+  createCategory: protectedProcedure
+    .input(
+      z.object({
+        folderName: z.string().trim().min(1, "Nome da pasta é obrigatório"),
+        displayName: z.string().trim().min(1, "Nome de exibição é obrigatório"),
+        code3: z
+          .string()
+          .trim()
+          .toUpperCase()
+          .length(3, "Código deve ter exatamente 3 letras"),
+        trayCategoriaPrincipal: z.string().trim().min(1, "Categoria nível 1 é obrigatória"),
+        traySubcategoria: z.string().trim().min(1).optional(),
+        trayEstiloAdicional: z.string().trim().min(1).optional(),
+        trayCategoriaId: z.number().int().positive().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const db = await requireDb();
+
+      const [existing] = await db
+        .select({ id: categoryCodes.id })
+        .from(categoryCodes)
+        .where(or(eq(categoryCodes.folderName, input.folderName), eq(categoryCodes.code3, input.code3)));
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Já existe uma categoria com esse nome de pasta ou código "${input.code3}".`,
+        });
+      }
+
+      await db.insert(categoryCodes).values({
+        folderName: input.folderName,
+        displayName: input.displayName,
+        code3: input.code3,
+        trayCategoriaPrincipal: input.trayCategoriaPrincipal,
+        traySubcategoria: input.traySubcategoria ?? null,
+        trayEstiloAdicional: input.trayEstiloAdicional ?? null,
+        trayCategoriaId: input.trayCategoriaId ?? null,
+      });
+
+      const [created] = await db.select().from(categoryCodes).where(eq(categoryCodes.folderName, input.folderName));
+      if (!created) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Categoria criada mas não encontrada." });
+      }
+      return created;
+    }),
 });
