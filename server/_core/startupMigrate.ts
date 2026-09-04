@@ -228,6 +228,7 @@ async function ensureSchema(pool: mysql.Pool) {
       traySubcategoria varchar(255),
       traySubsubcategoria varchar(255),
       trayEstiloAdicional varchar(255),
+      trayCategoriaId int,
       driveFolderId varchar(128),
       createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -298,6 +299,9 @@ async function ensureSchema(pool: mysql.Pool) {
     "ALTER TABLE products ADD COLUMN mockupUrlBlack text NULL",
     // Estilo adicional pro export multi-categoria (Ambientes + Estilos + Temas).
     "ALTER TABLE category_codes ADD COLUMN trayEstiloAdicional varchar(255) NULL",
+    // ID Tray real da categoria (cadastro via UI, catalog.createCategory) —
+    // usado só como override em buildAdditionalCategoryIds.
+    "ALTER TABLE category_codes ADD COLUMN trayCategoriaId int NULL",
   ]) {
     try {
       await pool.query(stmt);

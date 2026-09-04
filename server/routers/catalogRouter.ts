@@ -1,14 +1,14 @@
 import crypto from "crypto";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import ExcelJS from "exceljs";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getValidAccessToken } from "../_core/oauth";
 import { googleDriveService, extractDriveFileId } from "../services/googleDriveService";
 import { analyzeImageForCatalog, buildSku, buildSlug } from "../services/catalogService";
 import { roomsForCategory } from "../services/catalogPipeline";
-import { buildAdditionalCategoryIds, detectNivel3 } from "../services/trayCategoryIds";
+import { buildAdditionalCategoryIds, buildCategoryIdOverrides, detectNivel3 } from "../services/trayCategoryIds";
 import { getDb } from "../db";
 import { categoryCodes, products, productStatusEnum, traySyncedNames } from "../../drizzle/schema";
 import { ENV } from "../_core/env";
@@ -1006,6 +1006,14 @@ export const catalogRouter = router({
       const skipped = allRows
         .filter((r) => !r.p.imageUrl1)
         .map((r) => ({ id: r.p.id, sku: r.p.sku, nome: r.p.nome }));
+
+      // IDs de categoria cadastrados manualmente pela usuária (ver
+      // catalog.createCategory) têm prioridade sobre TRAY_CATEGORY_ID —
+      // buscado uma vez pra todas as categorias, não só as dos produtos
+      // exportados (uma categoria "Estilos" referenciada por várias outras
+      // via trayEstiloAdicional pode não ter produto próprio nesta leva).
+      const allCategoryRows = await db.select().from(categoryCodes);
+      const categoryIdOverrides = buildCategoryIdOverrides(allCategoryRows);
       // Produtos gerados antes da Etapa 4 (mockup por cor de moldura) não
       // têm mockupUrlLightWood/DarkWood/White/Black — a variação por cor
       // fica em branco na planilha do produto principal e a usuária
@@ -1106,6 +1114,7 @@ export const catalogRouter = router({
         const additionalCategoryIds = buildAdditionalCategoryIds({
           eligibleRooms: roomsForCategory(c?.code3),
           trayEstiloAdicional: c?.trayEstiloAdicional,
+          idOverrides: categoryIdOverrides,
         });
         const catAdic: Record<string, number | null> = {};
         for (let i = 0; i < 10; i++) {
@@ -1490,4 +1499,69 @@ export const catalogRouter = router({
     const db = await requireDb();
     return db.select().from(categoryCodes).orderBy(categoryCodes.displayName);
   }),
+
+  /**
+   * Cadastra uma nova categoria no padrão Tray direto pela curadoria de
+   * catálogo — antes só dava pra criar categoria editando os seeds em
+   * scripts/seedCategoryCodes.ts e server/_core/startupMigrate.ts na mão.
+   *
+   * `trayCategoriaPrincipal`/`traySubcategoria` viram as colunas "Nome da
+   * categoria - nível 1/2" no export (`exportTrayImport`) — a Tray casa
+   * essas colunas por NOME, não por ID, então a categoria já funciona pro
+   * import principal assim que cadastrada aqui, sem precisar de ID nenhum.
+   *
+   * `trayCategoriaId` é opcional e serve pra OUTRA coisa: é o ID numérico
+   * real do nó desta categoria na árvore da Tray (copiado do admin), usado
+   * só quando ALGUMA OUTRA categoria referenciar esta aqui pelo campo
+   * `trayEstiloAdicional` (categoria adicional/cross-listing no export —
+   * ver buildCategoryIdOverrides em server/services/trayCategoryIds.ts).
+   * Sem ele, a categoria adicional correspondente simplesmente não é
+   * gerada; o import principal do produto não é afetado.
+   */
+  createCategory: protectedProcedure
+    .input(
+      z.object({
+        folderName: z.string().trim().min(1, "Nome da pasta é obrigatório"),
+        displayName: z.string().trim().min(1, "Nome de exibição é obrigatório"),
+        code3: z
+          .string()
+          .trim()
+          .toUpperCase()
+          .length(3, "Código deve ter exatamente 3 letras"),
+        trayCategoriaPrincipal: z.string().trim().min(1, "Categoria nível 1 é obrigatória"),
+        traySubcategoria: z.string().trim().min(1).optional(),
+        trayEstiloAdicional: z.string().trim().min(1).optional(),
+        trayCategoriaId: z.number().int().positive().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const db = await requireDb();
+
+      const [existing] = await db
+        .select({ id: categoryCodes.id })
+        .from(categoryCodes)
+        .where(or(eq(categoryCodes.folderName, input.folderName), eq(categoryCodes.code3, input.code3)));
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `Já existe uma categoria com esse nome de pasta ou código "${input.code3}".`,
+        });
+      }
+
+      await db.insert(categoryCodes).values({
+        folderName: input.folderName,
+        displayName: input.displayName,
+        code3: input.code3,
+        trayCategoriaPrincipal: input.trayCategoriaPrincipal,
+        traySubcategoria: input.traySubcategoria ?? null,
+        trayEstiloAdicional: input.trayEstiloAdicional ?? null,
+        trayCategoriaId: input.trayCategoriaId ?? null,
+      });
+
+      const [created] = await db.select().from(categoryCodes).where(eq(categoryCodes.folderName, input.folderName));
+      if (!created) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Categoria criada mas não encontrada." });
+      }
+      return created;
+    }),
 });

@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search } from "lucide-react";
+import { Search, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import { FONT_SANS, FONT_MONO, FIELD_LABEL_CLASS, FIELD_INPUT_CLASS, GHOST_BTN_CLASS } from "@/lib/designTokens";
@@ -35,6 +35,171 @@ function DriveThumb({ fileId, name }: { fileId: string; name: string }) {
       loading="lazy"
       className="h-full w-full object-cover"
     />
+  );
+}
+
+/**
+ * Cadastro de categoria nova no padrão Tray, direto na curadoria — antes só
+ * dava pra criar categoria editando os seeds em scripts/seedCategoryCodes.ts
+ * e server/_core/startupMigrate.ts na mão.
+ */
+function NewCategoryDialog({
+  open,
+  onOpenChange,
+  existingPrincipais,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  existingPrincipais: string[];
+  onCreated: (categoryId: number) => void;
+}) {
+  const [folderName, setFolderName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [code3, setCode3] = useState("");
+  const [principal, setPrincipal] = useState("");
+  const [subcategoria, setSubcategoria] = useState("");
+  const [estiloAdicional, setEstiloAdicional] = useState("");
+  const [trayCategoriaId, setTrayCategoriaId] = useState("");
+
+  const utils = trpc.useUtils();
+  const createMutation = trpc.catalog.createCategory.useMutation({
+    onSuccess: (created) => {
+      toast.success(`Categoria "${created.displayName}" cadastrada`);
+      utils.catalog.listCategories.invalidate();
+      onCreated(created.id);
+      onOpenChange(false);
+      setFolderName("");
+      setDisplayName("");
+      setCode3("");
+      setPrincipal("");
+      setSubcategoria("");
+      setEstiloAdicional("");
+      setTrayCategoriaId("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const canSubmit =
+    folderName.trim().length > 0 &&
+    displayName.trim().length > 0 &&
+    code3.trim().length === 3 &&
+    principal.trim().length > 0;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nova categoria (padrão Tray)</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div>
+            <Label className={FIELD_LABEL_CLASS}>Nome da pasta (banco de imagens)</Label>
+            <Input
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              placeholder="Ex: Animais - Leões"
+              className={FIELD_INPUT_CLASS}
+            />
+          </div>
+          <div>
+            <Label className={FIELD_LABEL_CLASS}>Nome de exibição</Label>
+            <Input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Ex: Leões"
+              className={FIELD_INPUT_CLASS}
+            />
+          </div>
+          <div>
+            <Label className={FIELD_LABEL_CLASS}>Código (3 letras, SKU)</Label>
+            <Input
+              value={code3}
+              onChange={(e) => setCode3(e.target.value.toUpperCase().slice(0, 3))}
+              placeholder="Ex: LEA"
+              maxLength={3}
+              className={`${FIELD_INPUT_CLASS} uppercase`}
+            />
+          </div>
+          <div>
+            <Label className={FIELD_LABEL_CLASS}>Categoria nível 1 (Tray)</Label>
+            <Input
+              value={principal}
+              onChange={(e) => setPrincipal(e.target.value)}
+              placeholder="Ex: Temas"
+              list="tray-categoria-principal-options"
+              className={FIELD_INPUT_CLASS}
+            />
+            <datalist id="tray-categoria-principal-options">
+              {existingPrincipais.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+          </div>
+          <div>
+            <Label className={FIELD_LABEL_CLASS}>Subcategoria nível 2 (Tray) — opcional</Label>
+            <Input
+              value={subcategoria}
+              onChange={(e) => setSubcategoria(e.target.value)}
+              placeholder="Ex: Animais"
+              className={FIELD_INPUT_CLASS}
+            />
+          </div>
+          <div>
+            <Label className={FIELD_LABEL_CLASS}>Estilo adicional (Tray) — opcional</Label>
+            <Input
+              value={estiloAdicional}
+              onChange={(e) => setEstiloAdicional(e.target.value)}
+              placeholder="Ex: Minimalistas"
+              className={FIELD_INPUT_CLASS}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Marca produtos desta categoria também na categoria "Estilos &gt; {estiloAdicional || "..."}"
+              — só funciona se essa categoria de estilo já tiver um "ID Tray" cadastrado (campo abaixo,
+              cadastrado nela mesma).
+            </p>
+          </div>
+          <div>
+            <Label className={FIELD_LABEL_CLASS}>ID Tray desta categoria — opcional</Label>
+            <Input
+              type="number"
+              min={1}
+              value={trayCategoriaId}
+              onChange={(e) => setTrayCategoriaId(e.target.value)}
+              placeholder="Ex: 23"
+              className={FIELD_INPUT_CLASS}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              ID numérico real desta categoria no admin da Tray. Só é usado quando OUTRA categoria
+              referenciar esta aqui em "Estilo adicional" — não afeta o import principal do produto.
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            className="bg-[#4338CA] text-white hover:bg-[#3730A3]"
+            disabled={!canSubmit || createMutation.isPending}
+            onClick={() =>
+              createMutation.mutate({
+                folderName: folderName.trim(),
+                displayName: displayName.trim(),
+                code3: code3.trim(),
+                trayCategoriaPrincipal: principal.trim(),
+                traySubcategoria: subcategoria.trim() || undefined,
+                trayEstiloAdicional: estiloAdicional.trim() || undefined,
+                trayCategoriaId: trayCategoriaId.trim() ? Number(trayCategoriaId) : undefined,
+              })
+            }
+          >
+            {createMutation.isPending ? "Salvando..." : "Cadastrar categoria"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -182,6 +347,7 @@ export default function CatalogPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [styleOverride, setStyleOverride] = useState<StyleOverride>("auto");
+  const [newCategoryOpen, setNewCategoryOpen] = useState(false);
 
   const utils = trpc.useUtils();
   const categoriesQuery = trpc.catalog.listCategories.useQuery(undefined, {
@@ -531,6 +697,12 @@ export default function CatalogPage() {
     return map;
   }, [foldersQuery.data, categoriesQuery.data]);
 
+  const existingPrincipais = useMemo(() => {
+    const set = new Set<string>();
+    for (const cat of categoriesQuery.data ?? []) set.add(cat.trayCategoriaPrincipal);
+    return Array.from(set).sort();
+  }, [categoriesQuery.data]);
+
   const handleSelectCategory = (id: string) => {
     setCategoryId(id);
     // Categoria só define SKU/categoria da Tray — não mexe mais no Folder ID
@@ -704,21 +876,33 @@ export default function CatalogPage() {
               </div>
               <div>
                 <Label className={FIELD_LABEL_CLASS}>Categoria (SKU / Tray)</Label>
-                <Select value={categoryId} onValueChange={handleSelectCategory}>
-                  <SelectTrigger className={FIELD_INPUT_CLASS}>
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categoriesQuery.data?.map((cat) => {
-                      const folder = folderByName.get(cat.id);
-                      return (
-                        <SelectItem key={cat.id} value={String(cat.id)}>
-                          {cat.code3} — {cat.displayName} {folder ? "✓" : "(sem pasta)"}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select value={categoryId} onValueChange={handleSelectCategory}>
+                    <SelectTrigger className={`${FIELD_INPUT_CLASS} flex-1`}>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categoriesQuery.data?.map((cat) => {
+                        const folder = folderByName.get(cat.id);
+                        return (
+                          <SelectItem key={cat.id} value={String(cat.id)}>
+                            {cat.code3} — {cat.displayName} {folder ? "✓" : "(sem pasta)"}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="flex-none"
+                    title="Cadastrar nova categoria"
+                    onClick={() => setNewCategoryOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label className={FIELD_LABEL_CLASS}>Quantidade</Label>
@@ -880,6 +1064,16 @@ export default function CatalogPage() {
                       })}
                     </SelectContent>
                   </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="flex-none"
+                    title="Cadastrar nova categoria"
+                    onClick={() => setNewCategoryOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
                   <Button
                     type="button"
                     size="sm"
@@ -1440,6 +1634,12 @@ export default function CatalogPage() {
           </div>
         </div>
       </div>
+      <NewCategoryDialog
+        open={newCategoryOpen}
+        onOpenChange={setNewCategoryOpen}
+        existingPrincipais={existingPrincipais}
+        onCreated={(id) => handleSelectCategory(String(id))}
+      />
     </div>
   );
 }

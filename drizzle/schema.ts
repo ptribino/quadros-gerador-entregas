@@ -55,6 +55,14 @@ export const categoryCodes = mysqlTable(
     // categoria cuja principal é Temas>Animais. Null quando a principal já é
     // Estilos (já coberta) ou quando nenhum Estilo combina com a categoria.
     trayEstiloAdicional: varchar("trayEstiloAdicional", { length: 255 }),
+    // ID numérico real do nó desta categoria na árvore da Tray (caminho
+    // trayCategoriaPrincipal[>traySubcategoria]) — preenchido manualmente
+    // pela usuária ao cadastrar a categoria, copiando do admin da Tray.
+    // Usado só pra resolver `trayEstiloAdicional` de OUTRAS categorias em
+    // categorias adicionais no export (ver buildCategoryIdOverrides em
+    // server/services/trayCategoryIds.ts) — null quando ainda não
+    // cadastrado, sem impacto no import principal (que casa por nome).
+    trayCategoriaId: int("trayCategoriaId"),
     driveFolderId: varchar("driveFolderId", { length: 128 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
