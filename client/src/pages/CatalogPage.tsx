@@ -303,7 +303,8 @@ const INSTRUCTION_STEPS: React.ReactNode[] = [
   </>,
   <>
     Com os mesmos produtos ainda marcados, clique em <strong>Gerar imagens</strong> — o sistema
-    gera 3 imagens por produto (~1,5 min cada) e salva na sua pasta do Drive.
+    gera 6 imagens por produto (2 ambientes + 4 cores de moldura, leva alguns minutos) e salva na
+    sua pasta do Drive.
   </>,
   <>
     Quando a coluna <strong>Geração</strong> mostrar{" "}
@@ -1209,7 +1210,7 @@ export default function CatalogPage() {
                     styleOverride: styleOverride === "auto" ? undefined : styleOverride,
                   })
                 }
-                title="Enfileira os selecionados para gerar 3 imagens cada (lifestyle + profissional + mockup)"
+                title="Enfileira os selecionados para gerar 6 imagens cada (2 ambientes/lifestyle + 4 cores de moldura)"
               >
                 {enqueueMutation.isPending ? "..." : "Gerar imagens"}
               </Button>
